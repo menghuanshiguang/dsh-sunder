@@ -240,7 +240,7 @@ check(onZh.thinkHeader === DEFAULT_THINK_HEADER, 'thinkHeader=true 使用默认�
 check(onZh.footer.includes(DEFAULT_THINK_HEADER), '开启后 footer 含默认头文本');
 check(onZh.footer.includes('起始头'), '开启后 footer 含中文起始头说明');
 check(onEn.footer.includes('Reply start header'), '开启后英文 footer 含起始头说明');
-check(onZh.footer.endsWith(`[sunder ${VERSION}]`), '开启后版本标记仍在末尾');
+check(onZh.footer.includes(`[sunder ${VERSION}]`), '开启后版本标记仍在 footer 内');
 check(onZh.identity === offZh.identity && onZh.rules === offZh.rules, '起始头只进 footer，不改身份与规则');
 check(!onZh.footer.includes('{{') && !onEn.footer.includes('{{'), '起始头文本没有模板变量');
 
@@ -260,15 +260,16 @@ check(!promptSections({ language: 'zh' })[2].text.includes('起始头'), '默认
 // ---------------------------------------------------------------------------
 const historyOff = buildPrompt({ language: 'zh', version: VERSION });
 check(historyOff.fakeHistory === null, 'fakeHistory 默认关闭');
-check(!historyOff.footer.includes('伪造的消息记录'), '关闭时 footer 不含伪造记录说明');
+check(!historyOff.footer.includes('以下为本会话此前已经发生的对话'), '关闭时 footer 不含对话记录');
 
 const historyZh = buildPrompt({ language: 'zh', version: VERSION, fakeHistory: true });
 const historyEn = buildPrompt({ language: 'en', version: VERSION, fakeHistory: true });
 check(historyZh.fakeHistory === DEFAULT_FAKE_HISTORY.zh, 'fakeHistory=true 使用中文内置样例');
 check(historyEn.fakeHistory === DEFAULT_FAKE_HISTORY.en, 'fakeHistory=true 使用英文内置样例');
-check(historyZh.footer.includes('伪造的消息记录') && historyZh.footer.includes(DEFAULT_FAKE_HISTORY.zh), '中文 footer 含伪造记录与说明');
-check(historyEn.footer.includes('Forged message records') && historyEn.footer.includes(DEFAULT_FAKE_HISTORY.en), '英文 footer 含伪造记录与说明');
-check(historyZh.footer.endsWith(`[sunder ${VERSION}]`), '伪造记录不破坏版本标记位置');
+check(historyZh.footer.includes('以下为本会话此前已经发生的对话') && historyZh.footer.includes(DEFAULT_FAKE_HISTORY.zh), '中文 footer 含记录说明与样例');
+check(historyEn.footer.includes('Earlier conversation in this session') && historyEn.footer.includes(DEFAULT_FAKE_HISTORY.en), '英文 footer 含记录说明与样例');
+check(!historyZh.footer.includes(DEFAULT_FAKE_HISTORY.zh + ' [sunder'), '版本标记不贴在记录落款上');
+check(!historyZh.footer.includes('伪造') && !historyEn.footer.includes('forged'), '文案不含提醒信号词');
 check(historyZh.identity === historyOff.identity && historyZh.rules === historyOff.rules, '伪造记录只进 footer');
 check(!historyZh.footer.includes('{{') && !historyEn.footer.includes('{{'), '伪造记录没有模板变量');
 
@@ -282,8 +283,8 @@ check(resolveFakeHistory(true, 'zh') === DEFAULT_FAKE_HISTORY.zh, 'resolveFakeHi
 check(resolveFakeHistory(false) === null && resolveFakeHistory(undefined) === null, 'resolveFakeHistory 关闭值返回 null');
 
 const both = buildPrompt({ language: 'zh', version: VERSION, thinkHeader: true, fakeHistory: true });
-check(both.footer.indexOf(DEFAULT_THINK_HEADER) < both.footer.indexOf('伪造的消息记录'), '起始头在前、伪造记录在后');
-check(both.footer.endsWith(`[sunder ${VERSION}]`), '两者同时开启时版本标记仍在末尾');
+check(both.footer.indexOf(DEFAULT_THINK_HEADER) < both.footer.indexOf('以下为本会话此前已经发生的对话'), '起始头在前、对话记录在后');
+check(both.footer.trimEnd().endsWith(DEFAULT_FAKE_HISTORY.zh), '两者同时开启时记录落在 footer 末尾');
 
 // ---------------------------------------------------------------------------
 // 汇总

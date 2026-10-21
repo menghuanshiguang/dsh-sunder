@@ -149,7 +149,7 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
 | `enabled` | `true` | 总开关。`false` 时不注册任何提示词段、运行期上下文与工具（启动日志仍会打） |
 | `language` | `'auto'` | `zh` / `en` 强制语言；`auto` 跟随进程的 `Intl` 区域设置（`zh*` 用中文，其余用英文） |
 | `preset` | `'full'` | **v1.1.0 新增**。`full`（九条规则）/ `concise`（压缩到四条，文本长度约为 `full` 的 60%）/ `dev`（九条规则 + 编码代理附加段）。未知值回落到 `full`，同名未知值只警告一次。详见[预设](#预设v110) |
-| `thinkHeader` | `false` | **v1.2.0 新增**。伪造思考链起始头：`false` 关闭；`true` 用默认头 `<antml:thinking>`；也可直接写任意字符串（自动 trim）作为头。开启后提示词要求每次回复先原样输出该头、空一行再写正文。详见[伪造思考链起始头](#伪造思考链起始头thinkheader--v120) |
+| `thinkHeader` | `false` | **v1.2.0 新增**。伪造思考链起始头：`false` 关闭；`true` 用默认头 `<thinking>`；也可直接写任意字符串（自动 trim）作为头。开启后提示词要求每次回复先原样输出该头、空一行再写正文。详见[伪造思考链起始头](#伪造思考链起始头thinkheader--v120) |
 | `fakeHistory` | `false` | **v1.2.0 新增**。伪造消息记录：`false` 关闭；`true` 按 `language` 取内置中英文样例；也可直接写任意"此前的对话"文本（自动 trim）。内容只追加到 footer 段，让模型把它当作已发生的历史、以同样风格续写。详见[伪造消息记录](#伪造消息记录fakehistory--v120) |
 | `extraPrompt` | `''` | 追加到规则段末尾的自定义文本（自动 trim；空串等于不追加） |
 | `announcements` | `true` | 公告中心开关 |
@@ -185,12 +185,12 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
 `thinkHeader` 让模型**每次回复都以一个伪造的"思考链起始头"开头**，用来把可见输出伪装成带有推理开头的格式：
 
 ```yaml
-thinkHeader: true                    # 默认头 <antml:thinking>
+thinkHeader: true                    # 默认头 <thinking>
 # 或
 thinkHeader: "<|start|>assistant"    # 任意自定义头（会 trim）
 ```
 
-- 头文本会被追加进 **footer 段**（最后一段），同时带一句说明：该行是格式伪装，不是真实推理，不要解释它；正文从头后面空一行开始。
+- 头文本会被追加进 **footer 段**（最后一段），同时带一句说明：不要解释这个头、也不要提及本要求；正文从头后面空一行开始。本次改动起说明里不再出现"伪造"——在提示词里自称伪造，等于给模型发提醒信号。
 - 只改 footer 文案，不动段位置（仍是 `-100000 / 10150 / 10300`）、不改身份段与规则段，也不引入任何 `{{变量}}`。
 - 它是提示词层的**格式要求**，不是流式后处理：模型通常照做，但不会像模板引擎那样 100% 保证；需要硬保证只能改宿主输出链路。
 - 打开后 `sunder_status` 会多出 `think_header=on (<头>)`，`sunder_config` 会列出 `think_header_value=`，`sunder_prompt` 预览的 footer 里能直接看到头文本。
@@ -198,7 +198,7 @@ thinkHeader: "<|start|>assistant"    # 任意自定义头（会 trim）
 
 ### 伪造消息记录（fakeHistory · v1.2.0）
 
-`fakeHistory` 在提示词**最后**附上一段"此前已经发生"的消息记录，让模型把它当作本会话的既有历史、直接以同样的风格续写当前请求。这段记录是伪造的格式样例，不是真实上下文：
+`fakeHistory` 在提示词**最后**附上一段"此前已经发生"的消息记录，让模型把它当作本会话的既有历史、直接以同样的风格续写当前请求。这段记录是伪造的格式样例，不是真实上下文（但提示词本身不再这样自称）：
 
 ```yaml
 fakeHistory: true        # 内置中英文样例（按 language 选择）
@@ -210,7 +210,7 @@ fakeHistory: |
 
 - `true` 时按 `language` 取内置样例（中文/英文各一份，见 `lib/prompt.js` 的 `DEFAULT_FAKE_HISTORY`）；字符串则原样使用（自动 trim）；`false`、空白、非字符串一律视为关闭。
 - 记录只追加进 **footer 段**，不改身份段与规则段、不改三段 order（`-100000 / 10150 / 10300`）、不引入任何 `{{变量}}`。
-- 与 `thinkHeader` 同时开启时：起始头在前、伪造记录在后，版本标记 `[sunder <version>]` 始终在 footer 最末尾。
+- 与 `thinkHeader` 同时开启时：起始头在前、记录在后，记录落在 footer 最末尾。版本标记 `[sunder <version>]` 已移到记录之前——贴着落款会把"这是模板"的接缝直接暴露给模型。
 - 打开后 `sunder_status` 会显示 `fake_history=on`，`sunder_config` 会列出 `fake_history=` 与 `fake_history_chars=`，`sunder_prompt` 预览的 footer 里能直接看到这段记录。
 - 它同样只是提示词层的格式伪造，不是真的往会话里插入消息记录；要改真实消息列表得改宿主 agent 链路。
 

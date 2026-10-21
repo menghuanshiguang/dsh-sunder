@@ -597,11 +597,17 @@ node scripts/doctor.mjs --no-network               # skip every network probe
   without opening the configuration.
 - **Forged reply header (`thinkHeader`)**: `false` / `true` / any string. When
   enabled the prompt requires every reply to start with that line before the
-  answer; it is only a formatting forgery appended to the footer section.
+  answer; it is only a formatting requirement appended to the footer section.
+  The default header is `<thinking>` (the delimiter the host uses when reasoning
+  travels as text), not an Anthropic `antml` tag, and the instruction no longer
+  announces itself as a forgery — self-labelling is a signal to the model.
 - **Forged message records (`fakeHistory`)**: `false` / `true` / any transcript
   text. `true` picks a built-in zh/en sample appended to the end of the prompt so
   the model continues a conversation that already complied. It is prompt text,
-  not real history, and never introduces template variables.
+  not real history, and never introduces template variables. The
+  intro line is a plain "Earlier conversation in this session:", the version tag
+  sits before the sample instead of glued to its last line, and nothing in the
+  text calls itself forged.
 - **`scripts/doctor.mjs`**: one-shot diagnostics for the install (`npm run
   doctor`).
 - **Announcement banner cap lowered from 5 to 3**, matching the host

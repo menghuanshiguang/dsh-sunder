@@ -213,7 +213,7 @@ node test/prompt.mjs
 
 | 配置 | 取值 | 作用 |
 | --- | --- | --- |
-| `thinkHeader` | `false` / `true` / 任意字符串 | 要求每次回复先原样输出该头、空一行再写正文；`true` 用 `<antml:thinking>` |
+| `thinkHeader` | `false` / `true` / 任意字符串 | 要求每次回复先原样输出该头、空一行再写正文；`true` 用 `<thinking>` |
 | `fakeHistory` | `false` / `true` / 任意对话文本 | 在提示词末尾附一段"已发生"的消息记录，让模型以同样风格续写；`true` 按 `language` 取内置中英文样例 |
 
 - 二者同时开启时：起始头在前、伪造记录在后，`[sunder <version>]` 始终在 footer 最末尾。
