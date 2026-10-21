@@ -50,9 +50,11 @@ function createCtx() {
       };
     },
   };
+  const listeners = new Map();
   const ctx = {
     systemPrompt: prompt,
-    on() {
+    on(name, handler) {
+      listeners.set(name, handler);
       return () => {};
     },
     effect(run) {
@@ -60,7 +62,7 @@ function createCtx() {
       return () => {};
     },
   };
-  return { ctx, sections, contexts, prompt };
+  return { ctx, sections, contexts, prompt, listeners };
 }
 
 let failures = 0;
@@ -73,7 +75,7 @@ const check = (condition, label, extra) => {
   console.error(`FAIL ${label}${extra === undefined ? '' : ` — ${extra}`}`);
 };
 
-const { ctx, sections, contexts, prompt } = createCtx();
+const { ctx, sections, contexts, prompt, listeners } = createCtx();
 
 try {
   sunder.apply(ctx, { announcements: false, updateCheck: false, language: 'zh' });
@@ -103,6 +105,33 @@ try {
     if (again.sections.length !== 3) stable = false;
   }
   check(stable, 'fifty repeated assemblies stay stable');
+
+  // Per-turn rule card: a real user-role message admitted with the request, so
+  // it lands after the runtime-context snapshot and immediately before the answer.
+  const preStep = listeners.get('agent/pre-step');
+  check(typeof preStep === 'function', 'pre-step listener registered');
+
+  const claimed = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'hello' }], source: { kind: 'human' } }];
+  const enter = { kind: 'enter', messages: claimed };
+  const firstTurn = await preStep({ agent: { id: 'a1' }, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  const card = firstTurn.messages.at(-1);
+  check(firstTurn.messages.length === 2, 'rule card is appended to the admitted batch', String(firstTurn.messages.length));
+  check(card?.role === 'user', 'rule card uses the user role', String(card?.role));
+  check(card?.source?.kind === 'plugin' && card?.source?.plugin === 'dsh-sunder', 'rule card is attributed to the plugin', JSON.stringify(card?.source));
+  check(card?.content?.[0]?.text.includes('本轮'), 'rule card carries the zh operative clause', String(card?.content?.[0]?.text).slice(0, 40));
+  check(firstTurn.messages[0] === claimed[0], 'the user request stays first and untouched');
+
+  const again = await preStep({ agent: { id: 'a1' }, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  check(again.messages.length === 1, 'the same turn is never injected twice');
+
+  const secondTurn = await preStep({ agent: { id: 'a1' }, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  check(secondTurn.messages.length === 2, 'the next turn gets its own card');
+
+  const toolStep = await preStep({ agent: { id: 'a1' }, turn: 3, step: 2, messages: claimed, signal: { aborted: false } }, async () => enter);
+  check(toolStep.messages.length === 1, 'tool rounds inherit the card instead of restating it');
+
+  const emptyTurn = await preStep({ agent: { id: 'a1' }, turn: 4, step: 1, messages: [], signal: { aborted: false } }, async () => ({ kind: 'enter', messages: [] }));
+  check(emptyTurn.messages.length === 0, 'a no-input turn is not turned into a request');
 
   // Runtime notices must survive a scoped suppression of optional context.
   const optional = contexts.filter((entry) => entry.required === true).map((entry) => entry.name);

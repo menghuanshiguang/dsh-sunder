@@ -21,6 +21,11 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ### Added
 
+- **每轮规则卡（`agent/pre-step` 注入）**：每个 turn 的第一次请求，把 `RULE_CARD` 作为一条真实
+  user 消息追加到本批输入末尾，位置在运行期上下文快照之后、模型回答之前。系统提示每轮才组装
+  一次，而这条消息在 `messages` 里——scope 影子段、别人的 `complete`、历史压缩都动不了它。
+  同一 `(agent, turn)` 只注入一次；工具轮次不重复；空 step 不注入。会话记录里可见
+  （`source.kind = 'plugin'`），不是隐藏注入。
 - `test/guard.mjs`：不依赖 DSH 运行时的守卫离线测试（迷你 fake registry 复刻
   `complete` 接管语义），断言排他替换、50 次组装不嵌套 wrapper、两个上下文为 required。
   之前守卫只在 `test/smoke.mjs` 里覆盖，而 smoke 在没有 DSH 运行时的机器上会整体跳过。

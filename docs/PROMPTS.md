@@ -131,6 +131,30 @@ sunder_prompt { "language": "zh", "preset": "dev", "section": "rules" }
 `section`（`all`（默认）/ `identity` / `rules` / `footer`）。输出按段打印，每段带标题与 order：
 
 ```
+## 每轮规则卡：`messages` 里的那一张
+
+三段是系统提示，每轮组装一次；规则卡不是。它走 `agent/pre-step`：在每个 turn 的第一次请求里，
+把 `RULE_CARD`（`lib/prompt.js`，中文约 100 字）作为一条**真实 user 消息**追加到本批输入末尾。
+
+位置由宿主决定，而不是由 order 决定：
+
+```
+[claimed 用户消息] → [运行期上下文快照] → [规则卡] → 模型回答
+```
+
+这样做的理由只有一条：**系统提示的位置可以被抢，`messages` 里的位置不能。** scope 影子段、
+别人的 `complete: true`、历史压缩、段序调整——这些都能改变系统提示，但改变不了本轮已经
+admit 的用户消息。越靠近回答的位置，越难被拿走。
+
+三条纪律写在 `index.js` 里：
+
+- 只在 `step === 1` 注入：工具轮次继承上一轮已经在上下文里的卡，不重复贴；
+- 同一 `(agent, turn)` 只注入一次：重试不会叠出第二张；
+- `decision.messages` 为空时不注入：没有输入的空 step 不能被这张卡变成一次真实请求。
+
+它是 logged message（`source.kind = 'plugin'`），所以会话记录里看得见——这是有意的，
+不是隐藏注入。
+
 ## identity (order -100000)
 …
 ## rules (order 10150)

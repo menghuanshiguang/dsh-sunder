@@ -13,6 +13,7 @@
  * @module dsh-sunder
  */
 
+import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -20,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements, selectAnnouncements } from './lib/announcements.js';
-import { buildPrompt } from './lib/prompt.js';
+import { buildPrompt, ruleCard } from './lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath } from './lib/state.js';
 import { applyUpdate, checkForUpdate, DEFAULT_REPO } from './lib/update.js';
 
@@ -346,6 +347,42 @@ export function apply(ctx, rawConfig = {}) {
     // is an announcement that scope chose not to deliver.
     required: true,
     text: () => renderAnnouncements(runtime.unread, language),
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-turn rule card. Sections are read once per assembly; this card is a real
+  // user-role message admitted in the same step as the request, so it lands
+  // after the runtime-context snapshot and immediately before the answer. No
+  // scope, `complete` section, or compaction pass can move it or drop it.
+  //
+  // It is injected once per turn (first step only): tool rounds inherit the
+  // conversation that already contains it.
+  // -------------------------------------------------------------------------
+  const injectedTurns = new Map();
+  ctx.on('agent/pre-step', async (payload, next) => {
+    const decision = await next();
+    if (decision.kind === 'reject') return decision;
+    if (payload?.step !== 1) return decision;
+    // A first step with nothing claimed owns a no-step turn; adding the card
+    // there would turn it into a real request.
+    if (decision.messages.length === 0) return decision;
+    const agentId = payload?.agent?.id ?? 'default';
+    if (Number.isFinite(payload?.turn)) {
+      if (injectedTurns.get(agentId) === payload.turn) return decision;
+      injectedTurns.set(agentId, payload.turn);
+    }
+    return {
+      ...decision,
+      messages: [
+        ...decision.messages,
+        {
+          id: randomUUID(),
+          role: 'user',
+          content: [{ type: 'text', text: ruleCard(language) }],
+          source: { kind: 'plugin', plugin: 'dsh-sunder' },
+        },
+      ],
+    };
   });
 
   // -------------------------------------------------------------------------

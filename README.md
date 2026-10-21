@@ -31,14 +31,15 @@ node scripts/install.mjs
 
 ## 它做什么
 
-Sunder 是一个 DSH 插件（bundle + 三个提示词段 + 一组 `sunder_*` 工具 + 一个浏览器端状态卡片 + 一个状态文件）：
+Sunder 是一个 DSH 插件（bundle + 三个提示词段 + 每轮注入的规则卡 + 一组 `sunder_*` 工具 + 一个浏览器端状态卡片 + 一个状态文件）：
 
 1. **覆盖默认身份与内容策略**：注册 `sunder:identity`、`sunder:rules`、`sunder:footer` 三段，分别占据系统提示的第一段、工具段之后、以及整份提示的最后一段；规则段有 `full` / `concise` / `dev` 三档预设可换。
 2. **关掉宿主的身份段**：bundle patch 把 `system-prompt` 的 `includeHarnessIdentity` 置为 `false`，避免默认身份声明与 Sunder 段互相打架。
 3. **防止被别的插件顶掉**：给 `systemPrompt.assemble` 装一层访问器守卫（guard），任何一次组装之后都补齐缺失的 `sunder:*` 段；组装被别的插件用 `complete: true` 整段顶掉时，**用三段整体替换那一段**，而不是与它同屏共存；守卫失效时还有 `system-prompt/assemble` waterfall 兜底。
 4. **公告中心**：从远端 feed 拉公告，镜像链兜底，网络不通时用随包的 `announcements.json`；未读公告以运行期上下文的形式进入当轮提示，也可以逐条确认。
-5. **更新检查与安装**：查 GitHub Releases，缓存 6 小时，发现新版本时在当轮提示里带一句提醒；需要时用 `sunder_update action=apply` 直接装上（先快照、校验包名，再写安装目录）。
-6. **可观测**：`sunder_status` / `sunder_config` / `sunder_prompt` 三个工具把版本、生效配置和最终提示词文本摊开给你看；DSH 设置页还有一个只读的 `Sunder` 分区与未读公告横幅。所有持久化数据都在一个 JSON 文件里。
+5. **每轮规则卡**：每个 turn 的第一次请求，把一段精简规则卡（约 100 字）作为**真实 user 消息**追加到本批输入末尾——它排在运行期上下文快照之后、模型回答之前。系统提示每轮组装一次，而这条消息在 `messages` 里：任何 scope、`complete` 段、历史压缩都挪不动它，也删不掉它。工具轮次不重复注入，同一 turn 不会出现第二张。
+6. **更新检查与安装**：查 GitHub Releases，缓存 6 小时，发现新版本时在当轮提示里带一句提醒；需要时用 `sunder_update action=apply` 直接装上（先快照、校验包名，再写安装目录）。
+7. **可观测**：`sunder_status` / `sunder_config` / `sunder_prompt` 三个工具把版本、生效配置和最终提示词文本摊开给你看；DSH 设置页还有一个只读的 `Sunder` 分区与未读公告横幅。所有持久化数据都在一个 JSON 文件里。
 
 ## 它不做什么
 

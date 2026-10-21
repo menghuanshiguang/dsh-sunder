@@ -50,17 +50,25 @@ tools, a browser-side status card, and one state file.
 3. **Resists being displaced by other plugins.** It installs an accessor guard
    on `systemPrompt.assemble`, keyed by
    `Symbol.for('dsh-sunder.assembleGuard')`, that restores any missing `sunder:*`
-   section after every assembly. A `system-prompt/assemble` waterfall is the
-   fallback when the guard cannot be installed.
+   section after every assembly, and replaces a foreign `complete` section
+   outright instead of leaving two competing top-level instructions in one
+   prompt. A `system-prompt/assemble` waterfall is the fallback when the guard
+   cannot be installed.
 4. **Announcement centre.** Pulls announcements from a remote feed, falls back
    through a mirror chain, and uses the bundled `announcements.json` when the
    network is unavailable. Unread entries reach the current turn as runtime
    context, and can be acknowledged one at a time.
-5. **Update check and install.** Checks GitHub Releases, caches the result for
+5. **A per-turn rule card.** On the first request of every turn, a compact
+   restatement of the operative rules is appended as a **real user message** at
+   the end of that step's admitted batch — after the runtime-context snapshot and
+   immediately before the answer. Sections are read once per assembly; this card
+   lives in `messages`, so no scope, `complete` section or compaction pass can
+   move or drop it. Tool rounds do not restate it and a turn never gets a second.
+6. **Update check and install.** Checks GitHub Releases, caches the result for
    6 hours, and adds a one-line reminder to the current turn when a newer
    version exists. `sunder_update action=apply` installs it: snapshot, verify the
    package name, then write.
-6. **Observable.** `sunder_status`, `sunder_config` and `sunder_prompt` expose
+7. **Observable.** `sunder_status`, `sunder_config` and `sunder_prompt` expose
    the version, the effective configuration and the final prompt text. The DSH
    settings page also gets a read-only `Sunder` section and an
    unread-announcement banner. All persisted data lives in a single JSON file.
