@@ -2,5 +2,19 @@
   "meta": {
     "title": "Sunder（无限制提示词包）",
     "description": "用 Sunder 提示词包替换部署 persona，并在 Harness 内推送版本公告与更新提醒。"
+  },
+  "presets": {
+    "full": {
+      "label": "完整",
+      "description": "身份声明 + 九条运行规则 + 版本页脚，默认预设。"
+    },
+    "concise": {
+      "label": "精简",
+      "description": "身份声明 + 四条压缩规则 + 短页脚，约省四成字符，保留不拒绝语义。"
+    },
+    "dev": {
+      "label": "编码代理",
+      "description": "完整规则外加编码代理段：交付完整可运行代码、不缩范围、不跳过验证。"
+    }
   }
 }

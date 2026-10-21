@@ -15,12 +15,20 @@
         enabled: true
         # auto | zh | en — auto follows the host locale.
         language: auto
+        # full | concise | dev — prompt pack variant (unknown values fall back to full).
+        preset: full
         # Extra user rules, appended to the Sunder operating rules.
         extraPrompt: ""
         announcements: true
         announceLimit: 3
+        # 公告源：主 URL、额外镜像、内置镜像链、离线内置兜底。
+        feedUrl: https://raw.githubusercontent.com/menghuanshiguang/dsh-sunder/main/announcements.json
+        feedMirrors: []
+        builtinMirrors: true
+        bundledAnnouncements: true
         updateCheck: true
         updateIntervalHours: 6
+        repo: menghuanshiguang/dsh-sunder
         tools: true
         guard: true
         debug: false

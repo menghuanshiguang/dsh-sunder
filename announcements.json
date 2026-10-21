@@ -13,5 +13,20 @@
     },
     "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.0",
     "minVersion": "1.0.0"
+  },
+  {
+    "id": "2026-10-21-sunder-1-1-0",
+    "level": "info",
+    "date": "2026-10-21",
+    "title": {
+      "zh": "Sunder 1.1.0：预设、状态卡片与一键安装",
+      "en": "Sunder 1.1.0: presets, a status card and one-command install"
+    },
+    "body": {
+      "zh": "三档提示词预设（full / concise / dev）、新工具 sunder_config 与 sunder_prompt；sunder_update 新增 action=apply，可在会话里直接装上最新 release（先快照到 $DSH_HOME/sunder/backups，校验包名后才写盘）。另附 scripts/install.mjs / uninstall.mjs 一键挂载 profile，以及随包浏览器端设置卡片与未读公告横幅。配置项新增 preset、feedUrl、feedMirrors、builtinMirrors、bundledAnnouncements、repo。装完仍需重启 DSH。",
+      "en": "Three prompt presets (full / concise / dev), two new tools (sunder_config, sunder_prompt), and an action=apply mode for sunder_update that installs the latest release from inside a conversation: it snapshots the install under $DSH_HOME/sunder/backups first and only writes after the package name checks out. scripts/install.mjs and uninstall.mjs attach the bundle to a profile in one command, and a bundled browser card plus unread-announcement banner surface status in the DSH settings. New config keys: preset, feedUrl, feedMirrors, builtinMirrors, bundledAnnouncements, repo. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.1.0",
+    "minVersion": "1.1.0"
   }
 ]

@@ -2,5 +2,19 @@
   "meta": {
     "title": "Sunder (unrestricted prompt pack)",
     "description": "Swaps the deployment persona for the Sunder prompt pack, and reports release announcements and new versions inside the harness."
+  },
+  "presets": {
+    "full": {
+      "label": "Full",
+      "description": "Identity statement, nine operating rules and a version footer. The default preset."
+    },
+    "concise": {
+      "label": "Concise",
+      "description": "Identity statement, four compressed rules and a short footer: about 40% fewer characters, no-refusal semantics kept."
+    },
+    "dev": {
+      "label": "Coding agent",
+      "description": "The full rule set plus a coding-agent addendum: complete runnable code, no scope cuts, no skipped verification."
+    }
   }
 }

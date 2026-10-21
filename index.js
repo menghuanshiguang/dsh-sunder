@@ -13,16 +13,27 @@
  * @module dsh-sunder
  */
 
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements, selectAnnouncements } from './lib/announcements.js';
 import { buildPrompt } from './lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath } from './lib/state.js';
-import { checkForUpdate, DEFAULT_REPO } from './lib/update.js';
+import { applyUpdate, checkForUpdate, DEFAULT_REPO } from './lib/update.js';
 
 const require = createRequire(import.meta.url);
 const manifest = require('./package.json');
+
+/**
+ * The directory holding this very checkout — the directory `applyUpdate()`
+ * writes into. When the bundle is installed, `import.meta.url` points at the
+ * installed copy, so an applied update always targets the running install and
+ * never some other checkout on disk.
+ */
+const CHECKOUT_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** Version reported to prompt sections, tools, and update checks. */
 export const VERSION = manifest.version;
@@ -54,6 +65,7 @@ const runtime = {
 const DEFAULTS = {
   enabled: true,
   language: 'auto',
+  preset: 'full',
   extraPrompt: '',
   announcements: true,
   announceLimit: 3,
@@ -100,6 +112,145 @@ function ensureSunderSections(assembly, sections) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Self-update: `sunder_update` action=apply.
+//
+// `applyUpdate()` (lib/update.js) validates the package name and then overwrites
+// files in place; it keeps no rollback copy of its own and never throws. The
+// helpers below add the one thing it lacks — a best-effort snapshot of the
+// current checkout, reported as `backup=` — and turn its result into the
+// English-keyed, localized text the other tools already speak.
+// ---------------------------------------------------------------------------
+
+/** Directory names a checkout snapshot never copies. */
+const SNAPSHOT_SKIP = new Set(['.git', 'node_modules']);
+
+/**
+ * Copy the installed package into `destination` before an in-place update, so
+ * `action=apply` can name a directory a user can restore from. Best effort: a
+ * failed snapshot (locked file, no permission) never blocks the update itself.
+ *
+ * @param {string} source checkout directory
+ * @param {string} destination snapshot directory
+ * @returns {{ dir?: string, files: number }}
+ */
+function snapshotCheckout(source, destination) {
+  try {
+    mkdirSync(destination, { recursive: true });
+    let files = 0;
+    const walk = (current, prefix) => {
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        if (SNAPSHOT_SKIP.has(entry.name)) continue;
+        const relativePath = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+        const from = join(current, entry.name);
+        if (entry.isDirectory()) {
+          walk(from, relativePath);
+        } else if (entry.isFile()) {
+          const to = join(destination, ...relativePath.split('/'));
+          mkdirSync(dirname(to), { recursive: true });
+          copyFileSync(from, to);
+          files += 1;
+        }
+      }
+    };
+    walk(source, '');
+    return { dir: destination, files };
+  } catch {
+    return { files: 0 };
+  }
+}
+
+/** Whether an `applyUpdate()` result actually replaced files on disk. */
+function didApply(result) {
+  return result?.ok === true
+    && typeof result?.method === 'string'
+    && result.method !== 'up-to-date'
+    && Array.isArray(result.files)
+    && result.files.length > 0;
+}
+
+/** Localized one-liners for every `action=apply` outcome. */
+const APPLY_NOTES = {
+  applied: {
+    zh: '新文件已写入安装目录，重启 DSH 后生效。',
+    en: 'Files were replaced; restart DSH to load the new version.',
+  },
+  current: {
+    zh: '已是最新版本，没有改写任何文件。',
+    en: 'Already up to date; no files were changed.',
+  },
+  failed: {
+    zh: '更新没有完成，现有安装保持原样',
+    en: 'The update did not complete; the existing install was left untouched',
+  },
+};
+
+/** Localized explanation for the error codes `applyUpdate()` returns. */
+const APPLY_ERROR_NOTES = {
+  'invalid-repo': { zh: '配置里的 repo 不是 owner/name。', en: 'the configured repo is not owner/name' },
+  'invalid-dir': { zh: '安装目录不可用。', en: 'the install directory is not usable' },
+  'invalid-install': { zh: '安装目录里的 package.json 无法解析。', en: 'the installed package.json could not be parsed' },
+  'not-a-sunder-install': { zh: '目标目录属于别的插件，拒绝写入。', en: 'the target directory belongs to another package' },
+  'release-has-no-tag': { zh: '最新发布没有版本标签。', en: 'the latest release carries no tag' },
+  'download-unavailable': {
+    zh: '下载被网络或代理挡住（api.github.com / codeload 不可达）。',
+    en: 'downloads are blocked by the network or a proxy (api.github.com / codeload unreachable)',
+  },
+  'extract-failed': { zh: '源码包解压失败。', en: 'the downloaded archive could not be extracted' },
+  'package-name-mismatch': {
+    zh: '下载内容不是 dsh-sunder，已拒绝落盘。',
+    en: 'the download is not the dsh-sunder package; nothing was written',
+  },
+  'tree-unavailable': { zh: 'contents API 兜底取不到仓库树。', en: 'the contents-API fallback could not read the repository tree' },
+  'tree-truncated': { zh: '仓库树被截断，兜底不可用。', en: 'the repository tree was truncated' },
+  'empty-tree': { zh: '仓库树为空，兜底不可用。', en: 'the repository tree was empty' },
+  'incomplete-download': { zh: 'contents API 兜底下载不完整。', en: 'the contents-API fallback could not finish' },
+};
+
+/**
+ * Render an `applyUpdate()` result as English keys plus localized prose.
+ * Never throws: a malformed result degrades to `applied=no` with its raw reason.
+ *
+ * @param {object} input
+ * @param {{ ok: boolean, [key: string]: unknown } | undefined} input.result
+ * @param {'zh' | 'en'} input.language
+ * @param {string} input.installed running version, used when the result carries none
+ * @param {string} input.target directory the update writes into
+ * @param {string} [input.backup] snapshot directory, when one was kept
+ * @returns {{ applied: boolean, text: string }}
+ */
+function renderApplyReport({ result, language, installed, target, backup }) {
+  const ok = result?.ok === true;
+  const applied = didApply(result);
+  const method = typeof result?.method === 'string' && result.method.length > 0 ? result.method : 'none';
+  const version = typeof result?.version === 'string' && result.version.length > 0 ? result.version : undefined;
+  const previous = typeof result?.previous === 'string' && result.previous.length > 0 ? result.previous : installed;
+  const error = ok ? undefined : String(result?.error ?? 'unknown-error');
+  const explain = error === undefined ? undefined : (APPLY_ERROR_NOTES[error] ?? { zh: '未知错误码。', en: 'unrecognized error code' });
+  const note = error === undefined
+    ? (applied ? APPLY_NOTES.applied[language] : APPLY_NOTES.current[language])
+    : `${APPLY_NOTES.failed[language]} — ${explain[language]}`;
+
+  const lines = [
+    'action=apply',
+    `applied=${applied ? 'yes' : 'no'}`,
+    `from=${previous}`,
+    `to=${version ?? (ok ? previous : 'none')}`,
+    `target=${target}`,
+    `method=${method}`,
+  ];
+  if (applied) lines.push(`files=${result.files.length}`);
+  if (typeof backup === 'string' && backup.length > 0) lines.push(`backup=${backup}`);
+  if (error !== undefined) {
+    lines.push(`error=${error}`);
+    const detail = result?.detail ?? result?.actual;
+    if (typeof detail === 'string' && detail.length > 0) lines.push(`detail=${detail}`);
+  }
+  lines.push(`restart=${applied ? 'required' : 'not-needed'}`);
+  lines.push(`note=${note}`);
+  return { applied, text: lines.join('\n') };
+}
+
 /**
  * Register the plugin.
  * @param {import('@deepseek-ai/cordis').Context} ctx plugin context
@@ -115,6 +266,7 @@ export function apply(ctx, rawConfig = {}) {
   const language = resolveLanguage(config.language);
   const prompt = buildPrompt({
     language,
+    preset: config.preset,
     extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
     version: VERSION,
   });
@@ -418,7 +570,7 @@ export function apply(ctx, rawConfig = {}) {
         return {
           text: [
             `dsh-sunder ${VERSION}`,
-            `language=${language} sections=on guard=${config.guard === false ? 'off' : 'on'}`,
+            `language=${language} preset=${config.preset} sections=on guard=${config.guard === false ? 'off' : 'on'}`,
             `announcements=${config.announcements === false ? 'off' : `on (unread ${runtime.unread.length})`} update_check=${config.updateCheck === false ? 'off' : 'on'}`,
             `placements=${sections.map((section) => `${section.name}@${section.order}`).join(', ')}`,
             `update=${update}`,
@@ -459,26 +611,131 @@ export function apply(ctx, rawConfig = {}) {
 
     ctx.tools.register({
       name: 'sunder_update',
-      description: 'Force a dsh-sunder release check against GitHub (ignores the cache) and report the latest version, release URL, and whether an upgrade is available.',
+      description: 'Check for or apply a dsh-sunder release. action=check (default) forces a GitHub release check (ignoring the cache) and reports the latest version, release URL, and whether an upgrade is available. action=apply downloads the newest release, validates the package name, replaces the files in this install, and reports applied/from/to/backup — restart DSH afterwards.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['check', 'apply'],
+            description: 'check (default) only reports the latest release; apply downloads it and replaces the installed files, leaving a backup snapshot next to the state file.',
+          },
+        },
+      },
+      output,
+      async execute(args = {}) {
+        const action = args?.action === 'apply' ? 'apply' : 'check';
+        if (action === 'check') {
+          const result = await runUpdateCheck(true);
+          if (result === undefined) return { text: 'update check is disabled' };
+          if (result.error !== undefined) return { text: `update check failed: ${result.error}` };
+          return {
+            text: [
+              `installed=${VERSION}`,
+              `latest=${result.latest}`,
+              `upgrade=${result.newer === true ? 'yes' : 'no'}`,
+              result.url === undefined ? '' : `url=${result.url}`,
+              result.notes === undefined ? '' : `notes=${result.notes}`,
+              `checked_at=${result.checkedAt}`,
+            ].filter(Boolean).join('\n'),
+          };
+        }
+
+        // action=apply: snapshot the checkout, then let lib/update.js replace it.
+        // An explicit apply ignores the `updateCheck` switch — that switch only
+        // governs background/check requests — and never throws into the harness.
+        const target = CHECKOUT_DIR;
+        const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
+        const snapshot = snapshotCheckout(target, join(dirname(stateFile), 'backups', `${stamp}-v${VERSION}`));
+        let result;
+        try {
+          result = await applyUpdate({
+            repo: config.repo,
+            currentVersion: VERSION,
+            dir: target,
+            log: (message) => debug('apply:', message),
+          });
+        } catch (error) {
+          result = { ok: false, error: String(error?.message ?? error) };
+        }
+        let backup = snapshot.dir;
+        if (didApply(result) !== true && backup !== undefined) {
+          // Nothing was replaced (up to date, offline, rejected download): drop
+          // the snapshot instead of leaving clutter behind.
+          try {
+            rmSync(backup, { recursive: true, force: true });
+          } catch {
+            /* an undeletable snapshot is harmless */
+          }
+          backup = undefined;
+        }
+        return { text: renderApplyReport({ result, language, installed: VERSION, target, backup }).text };
+      },
+    });
+    ctx.tools.register({
+      name: 'sunder_config',
+      description: 'Show the effective dsh-sunder configuration (language, preset, feature switches, feed sources, repo) and where the state file lives.',
       parameters: { type: 'object', additionalProperties: false, properties: {} },
       output,
       async execute() {
-        const result = await runUpdateCheck(true);
-        if (result === undefined) return { text: 'update check is disabled' };
-        if (result.error !== undefined) return { text: `update check failed: ${result.error}` };
+        const mirrors = Array.isArray(config.feedMirrors) ? config.feedMirrors : [];
         return {
           text: [
-            `installed=${VERSION}`,
-            `latest=${result.latest}`,
-            `upgrade=${result.newer === true ? 'yes' : 'no'}`,
-            result.url === undefined ? '' : `url=${result.url}`,
-            result.notes === undefined ? '' : `notes=${result.notes}`,
-            `checked_at=${result.checkedAt}`,
-          ].filter(Boolean).join('\n'),
+            `dsh-sunder ${VERSION}`,
+            `enabled=${config.enabled !== false}`,
+            `language=${language} (raw ${String(config.language)}) preset=${config.preset}`,
+            `announcements=${config.announcements !== false} limit=${config.announceLimit} bundled_fallback=${config.bundledAnnouncements !== false}`,
+            `feed=${config.feedUrl}`,
+            `feed_mirrors=${mirrors.length === 0 ? '(built-in only)' : mirrors.join(', ')} builtin_mirrors=${config.builtinMirrors !== false}`,
+            `update_check=${config.updateCheck !== false} interval_hours=${config.updateIntervalHours} repo=https://github.com/${config.repo}`,
+            `tools=${config.tools !== false} guard=${config.guard !== false} debug=${config.debug === true}`,
+            `extra_prompt=${config.extraPrompt === '' ? '(none)' : `${config.extraPrompt.length} chars`}`,
+            `state=${stateFile}`,
+          ].join('\n'),
+        };
+      },
+    });
+
+    ctx.tools.register({
+      name: 'sunder_prompt',
+      description: 'Preview the exact prompt sections dsh-sunder registers (identity, rules, footer), optionally for another language or preset. Useful for debugging what the model sees.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          language: { type: 'string', enum: ['zh', 'en'], description: 'Override the language pack for this preview.' },
+          preset: { type: 'string', enum: ['full', 'concise', 'dev'], description: 'Override the preset for this preview.' },
+          section: { type: 'string', enum: ['all', 'identity', 'rules', 'footer'], description: 'Which section to print (default all).' },
+        },
+      },
+      output,
+      async execute(args = {}) {
+        const previewLanguage = args?.language === 'zh' || args?.language === 'en' ? args.language : language;
+        const previewPreset = typeof args?.preset === 'string' ? args.preset : config.preset;
+        const preview = buildPrompt({
+          language: previewLanguage,
+          preset: previewPreset,
+          extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
+          version: VERSION,
+        });
+        const which = args?.section ?? 'all';
+        const parts = which === 'all'
+          ? [
+              `## identity (order ${SECTION_TABLE[0].order})`, preview.identity, '',
+              `## rules (order ${SECTION_TABLE[1].order})`, preview.rules, '',
+              `## footer (order ${SECTION_TABLE[2].order})`, preview.footer,
+            ]
+          : [`## ${which}`, preview[which]];
+        return {
+          text: [
+            `language=${previewLanguage} preset=${previewPreset} version=${VERSION}`,
+            ...parts,
+          ].join('\n'),
         };
       },
     });
   }
 
-  console.info(`[dsh-sunder] v${VERSION} active — language=${language}, prompt sections registered, guard=${config.guard === false ? 'off' : 'on'}`);
+  console.info(`[dsh-sunder] v${VERSION} active — language=${language}, preset=${config.preset}, prompt sections registered, guard=${config.guard === false ? 'off' : 'on'}`);
 }

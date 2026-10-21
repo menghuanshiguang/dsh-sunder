@@ -1,0 +1,128 @@
+name: Bug 报告
+description: 报告 dsh-sunder 的问题：加载、提示词段、公告、更新检查、工具
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先过一遍 [故障排查](../docs/TROUBLESHOOTING.md)，
+        尤其是「装完没有生效」和「unknown prompt variable」两节——大部分问题在那里就有答案。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 发生了什么？期望发生什么？请把实际的报错原文（不是转述）贴进来。
+      placeholder: 启动后提示词没变化，日志里没有 [dsh-sunder] 这一行……
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 一步一步写清楚，从干净状态开始最好。
+      placeholder: |
+        1. 运行 node scripts/install.mjs
+        2. 重启 DSH
+        3. 在会话里调用 sunder_status
+        4. 看到 ……
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: dsh-sunder 版本
+      description: package.json 的 version，或启动日志里的 [dsh-sunder] vX.Y.Z
+      placeholder: 1.0.1
+    validations:
+      required: true
+
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DSH 版本
+      description: DSH「关于」面板里的版本，或启动日志第一行
+      placeholder: 0.2.1-rc.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - 其它（在描述里补充）
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js 版本
+      description: 输出 `node --version` 的结果
+      placeholder: v22.11.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: 安装方式
+      options:
+        - node scripts/install.mjs（v1.1.0 一键脚本）
+        - 手动改 profile 的 package.json + link:
+        - 离线 tarball（npm pack / file: 依赖）
+        - 其它
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 相关配置
+      description: profile 的 cordis.patch.yml 里 id 为 sunder 的那一段（以及 dsh.profile.bundles 的顺序）
+      render: yaml
+      placeholder: |
+        - insert:
+            - id: sunder
+              name: dsh-sunder
+              inject: [systemPrompt]
+              config:
+                preset: concise
+                language: zh
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志与 sunder_status 输出
+      description: DSH 启动日志里含 dsh-sunder / prompt / interpolate 的行，以及会话内 sunder_status 的原样输出
+      render: shell
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: 环境确认
+      options:
+        - label: 已经完整退出并重启过 DSH（不是最小化）
+          required: true
+        - label: 已经读过 docs/TROUBLESHOOTING.md 的对应小节
+          required: true
+        - label: 同时安装了其它提示词插件（如 dsh-purge）
+          required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 聊天记录片段、截图、改过的代码、可疑的插件组合，都可以放这里
+    validations:
+      required: false

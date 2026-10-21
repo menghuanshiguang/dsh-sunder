@@ -1,11 +1,12 @@
 {
   "name": "dsh-sunder",
-  "version": "1.0.1",
-  "description": "Sunder: an open-source DSH bundle that swaps the deployment persona for an unrestricted prompt pack, with built-in release announcements and self-update checks.",
+  "version": "1.1.0",
+  "description": "Sunder: an open-source DSH bundle that swaps the deployment persona for an unrestricted prompt pack, with presets, release announcements, self-update checks, install scripts and a settings UI.",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./icon.svg": "./icon.svg",
@@ -14,8 +15,16 @@
     "./announcements.json": "./announcements.json"
   },
   "dsh": {
+    "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
     }
   },
   "icon": "./icon.svg",
@@ -24,13 +33,17 @@
     "lib",
     "cordis.patch.yml",
     "locale",
+    "docs",
     "icon.svg",
     "announcements.json",
     "CHANGELOG.md",
     "README.md"
   ],
   "scripts": {
-    "test": "node test/smoke.mjs && node test/prompt.mjs",
+    "test": "node test/unit.mjs && node test/prompt.mjs && node test/client.mjs && node test/install.mjs && node test/update.mjs && node test/smoke.mjs && node scripts/check-package.mjs",
+    "test:client": "node test/client.mjs",
+    "install:profile": "node scripts/install.mjs",
+    "uninstall:profile": "node scripts/uninstall.mjs",
     "release": "node scripts/release.mjs",
     "publish:api": "node scripts/publish-api.mjs",
     "changelog": "node scripts/release.mjs --changelog"
@@ -44,7 +57,8 @@
     "prompt",
     "unrestricted",
     "announcements",
-    "self-update"
+    "self-update",
+    "presets"
   ],
   "author": "menghuanshiguang",
   "license": "MIT",
@@ -57,6 +71,7 @@
     "url": "https://github.com/menghuanshiguang/dsh-sunder/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "dsh": ">=0.2.1-rc.1"
   }
 }

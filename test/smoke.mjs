@@ -154,9 +154,21 @@ check(prompt.assemble !== undefined, 'assemble stays readable through the access
 
 const tools = ctx.get('tools')?.registered ?? [];
 const names = tools.map((tool) => tool.name);
-check(names.includes('sunder_status'), 'sunder_status registered');
-check(names.includes('sunder_notice'), 'sunder_notice registered');
-check(names.includes('sunder_update'), 'sunder_update registered');
+check(tools.length === 5, 'exactly five tools registered', names.join(', '));
+for (const name of ['sunder_status', 'sunder_notice', 'sunder_update', 'sunder_config', 'sunder_prompt']) {
+  check(names.includes(name), `${name} registered`);
+}
+const updateTool = tools.find((tool) => tool.name === 'sunder_update');
+check(
+  Array.isArray(updateTool?.parameters?.properties?.action?.enum)
+  && updateTool.parameters.properties.action.enum.includes('apply'),
+  'sunder_update exposes action=check|apply',
+);
+const promptTool = tools.find((tool) => tool.name === 'sunder_prompt');
+check(
+  Array.isArray(promptTool?.parameters?.properties?.preset?.enum),
+  'sunder_prompt exposes the preset parameter',
+);
 check(tools.every((tool) => typeof tool.execute === 'function'), 'every tool exposes execute');
 check(tools.every((tool) => tool.output && typeof tool.output.render === 'function'), 'every tool exposes output.render');
 check(tools.every((tool) => tool.parameters && tool.parameters.type === 'object'), 'every tool exposes an object parameter schema');

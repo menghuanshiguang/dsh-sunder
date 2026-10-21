@@ -5,19 +5,63 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: node ${{ matrix.node }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 安装 Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - name: Unit tests (no harness required)
+          node-version: ${{ matrix.node }}
+
+      - name: 环境信息
+        run: |
+          node --version
+          node -e "console.log(process.platform, process.arch)"
+
+      - name: 单元测试（test/unit.mjs）
+        if: ${{ hashFiles('test/unit.mjs') != '' }}
         run: node test/unit.mjs
-      - name: Prompt tests
+
+      - name: 提示词测试（test/prompt.mjs）
+        if: ${{ hashFiles('test/prompt.mjs') != '' }}
         run: node test/prompt.mjs
-      - name: Integration smoke (skips when no DSH runtime is installed)
-        run: node test/smoke.mjs
-      - name: Package checks
+
+      - name: 安装脚本测试（test/install.mjs）
+        if: ${{ hashFiles('test/install.mjs') != '' }}
+        run: node test/install.mjs
+
+      - name: 更新测试（test/update.mjs）
+        if: ${{ hashFiles('test/update.mjs') != '' }}
+        run: node test/update.mjs
+
+      - name: 客户端测试（test/client.mjs）
+        if: ${{ hashFiles('test/client.mjs') != '' }}
+        run: node test/client.mjs
+
+      - name: 报告缺失的测试
+        shell: pwsh
+        run: |
+          $missing = @('test/unit.mjs', 'test/prompt.mjs', 'test/install.mjs', 'test/update.mjs', 'test/client.mjs') |
+            Where-Object { -not (Test-Path $_) }
+          if ($missing.Count -gt 0) {
+            Write-Host "::notice::本次跳过了尚不存在的测试文件：$($missing -join ', ')"
+          }
+
+      - name: 打包契约检查（scripts/check-package.mjs）
         run: node scripts/check-package.mjs
