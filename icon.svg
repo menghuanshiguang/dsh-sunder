@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <rect width="36" height="36" rx="8" fill="#0B0F17"/>
+  <circle cx="18" cy="18" r="9" stroke="url(#sunderGrad)" stroke-width="1.6" opacity="0.9"/>
+  <path d="M18 4.5V31.5M4.5 18H31.5M8.5 8.5L27.5 27.5M27.5 8.5L8.5 27.5" stroke="url(#sunderGrad)" stroke-width="0.7" opacity="0.45"/>
+  <path d="M18 9.5L20.6 15.4L26.5 18L20.6 20.6L18 26.5L15.4 20.6L9.5 18L15.4 15.4L18 9.5Z" fill="url(#sunderGrad)"/>
+  <defs>
+    <linearGradient id="sunderGrad" x1="8" y1="8" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB020"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+</svg>

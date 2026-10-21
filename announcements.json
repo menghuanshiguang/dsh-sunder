@@ -1,0 +1,17 @@
+[
+  {
+    "id": "2026-10-21-hello-sunder",
+    "level": "info",
+    "date": "2026-10-21",
+    "title": {
+      "zh": "Sunder 1.0.0 发布",
+      "en": "Sunder 1.0.0 is out"
+    },
+    "body": {
+      "zh": "首个公开版本：启用后，部署 persona 会被 Sunder 提示词包替换，当前会话的下一轮请求立即生效。内置公告与更新检查，可在插件配置里关闭。",
+      "en": "First public release. Once enabled, the deployment persona is replaced by the Sunder prompt pack and the very next request in any open conversation picks it up. Announcements and update checks are built in and can be turned off in the plugin config."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.0",
+    "minVersion": "1.0.0"
+  }
+]

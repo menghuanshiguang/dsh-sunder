@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Sunder（无限制提示词包）",
+    "description": "用 Sunder 提示词包替换部署 persona，并在 Harness 内推送版本公告与更新提醒。"
+  }
+}

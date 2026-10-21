@@ -1,0 +1,26 @@
+# dsh-sunder bundle patch
+#
+# Inserted by the profile's `dsh.profile.bundles` list. The only host row this
+# bundle patches is `system-prompt`: Sunder provides the identity, so the
+# harness identity section is switched off to avoid two competing claims.
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+
+- insert:
+    - id: sunder
+      name: dsh-sunder
+      inject: [systemPrompt]
+      config:
+        enabled: true
+        # auto | zh | en — auto follows the host locale.
+        language: auto
+        # Extra user rules, appended to the Sunder operating rules.
+        extraPrompt: ""
+        announcements: true
+        announceLimit: 3
+        updateCheck: true
+        updateIntervalHours: 6
+        tools: true
+        guard: true
+        debug: false
