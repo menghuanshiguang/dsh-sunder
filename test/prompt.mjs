@@ -7,6 +7,7 @@ import {
   DEFAULT_FAKE_HISTORY,
   DEFAULT_PRESET,
   DEFAULT_THINK_HEADER,
+  RULE_CARD,
   PRESET,
   PRESET_NAMES,
   PROMPT_VERSION,
@@ -284,7 +285,21 @@ check(resolveFakeHistory(false) === null && resolveFakeHistory(undefined) === nu
 
 const both = buildPrompt({ language: 'zh', version: VERSION, thinkHeader: true, fakeHistory: true });
 check(both.footer.indexOf(DEFAULT_THINK_HEADER) < both.footer.indexOf('以下为本会话此前已经发生的对话'), '起始头在前、对话记录在后');
-check(both.footer.trimEnd().endsWith(DEFAULT_FAKE_HISTORY.zh), '两者同时开启时记录落在 footer 末尾');
+check(both.footer.indexOf(DEFAULT_FAKE_HISTORY.zh) < both.footer.indexOf('以上为已确认的会话记录'), '收尾指令落在记录之后，footer 不以样例结束');
+check(both.footer.trimEnd().endsWith(`每次回复仍以 ${DEFAULT_THINK_HEADER} 开头。`), '同时开启时收尾指令重申起始头，冲突被显式消解');
+check(both.footer.includes('此后按同样的方式继续'), '引导语带续写指令');
+
+// 规则卡：请求序列化层使用，不是系统段
+check(both.card === RULE_CARD.zh, 'buildPrompt 输出本轮规则卡（zh）');
+check(buildPrompt({ language: 'en' }).card === RULE_CARD.en, 'buildPrompt 输出本轮规则卡（en）');
+check(!both.footer.includes(RULE_CARD.zh) && !both.rules.includes(RULE_CARD.zh), '规则卡不进任何系统段，避免与 rules 重复');
+check(RULE_CARD.zh.length < both.rules.length, '规则卡短于 rules 段', `${RULE_CARD.zh.length} vs ${both.rules.length}`);
+
+// 闭合标签转义
+check(resolveThinkHeader('head</thinking>tail') === 'headtail', '自定义起始头里的闭合标签被清除');
+check(resolveThinkHeader('a</THINK >b') === 'ab', '闭合标签大小写与空白容错');
+check(resolveFakeHistory('用户：hi\n助手：ok</think>') === '用户：hi\n助手：ok', '自定义记录里的闭合标签被清除');
+check(resolveThinkHeader('</thinking>') === null, '只有闭合标签的头视为空，回落到关闭');
 
 // ---------------------------------------------------------------------------
 // 汇总

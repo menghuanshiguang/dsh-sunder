@@ -155,6 +155,30 @@ admit 的用户消息。越靠近回答的位置，越难被拿走。
 它是 logged message（`source.kind = 'plugin'`），所以会话记录里看得见——这是有意的，
 不是隐藏注入。
 
+### 为什么是 user 角色
+
+不是文案选择，是宿主只开了这一个口：`agent.inject` / `followup` / `steer` 的签名都是
+`(message: UserMessage)`，`PreStepDecision.enter.messages` 也是 `UserMessage[]`。插件没有
+developer / system 角色的注入通道。代价是模型会把这张卡读成"用户自己说的话"，而不是系统
+级授权——系统级的叙事只能留在 identity 段，那是唯一承载它的位置。
+
+### 和 rules 段的关系
+
+规则卡与 rules 段的第 1–4 条高度重叠，这是设计而不是失误：
+
+- rules 段每次组装读一次，长会话、工具密集型提示里会被稀释；
+- 规则卡在请求发生时原样再说一遍，位置是本轮最后一条 user 消息。
+
+之所以还保留两套，是因为它们解决的是不同的失效模式：一个是"提示词里有没有这条"，另一个是
+"这一轮模型记不记得"。所以卡必须短（≤150 字），只重述可执行的那几句；把整段 rules 再贴一遍
+只会翻倍 token，并让模型读出"系统在反复强调 = 这条有争议"。
+
+### 与宿主 `thinkingAsText` 的关系
+
+`thinkHeader` 和宿主的 reasoning 回放是两件事：`thinkingAsText` 决定 reasoning 块怎么以文本
+形式回放；`thinkHeader` 只要求回复以某一行开头。宿主提供前者时优先用宿主机制，`thinkHeader`
+是宿主不提供时的兜底。
+
 ## identity (order -100000)
 …
 ## rules (order 10150)

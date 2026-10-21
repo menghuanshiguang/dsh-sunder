@@ -357,6 +357,14 @@ export function apply(ctx, rawConfig = {}) {
   //
   // It is injected once per turn (first step only): tool rounds inherit the
   // conversation that already contains it.
+  //
+  // The user role is not a stylistic pick. Every model-visible injection channel
+  // the host exposes is typed to it — `agent.inject` / `followup` / `steer` take
+  // `UserMessage`, and `PreStepDecision.enter.messages` is `UserMessage[]` — so a
+  // plugin has no developer- or system-role path into the message list. The card
+  // is phrased as the user's own instruction because that is what the role means
+  // to the model; the system-level authorization narrative stays in the identity
+  // section, which is the only place that can carry it.
   // -------------------------------------------------------------------------
   const injectedTurns = new Map();
   ctx.on('agent/pre-step', async (payload, next) => {
@@ -777,14 +785,14 @@ export function apply(ctx, rawConfig = {}) {
 
     ctx.tools.register({
       name: 'sunder_prompt',
-      description: 'Preview the exact prompt sections dsh-sunder registers (identity, rules, footer), optionally for another language or preset. Useful for debugging what the model sees.',
+      description: 'Preview the exact prompt sections dsh-sunder registers (identity, rules, footer) plus the per-turn rule card serialized into the message list, optionally for another language or preset. Useful for debugging what the model sees.',
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
           language: { type: 'string', enum: ['zh', 'en'], description: 'Override the language pack for this preview.' },
           preset: { type: 'string', enum: ['full', 'concise', 'dev'], description: 'Override the preset for this preview.' },
-          section: { type: 'string', enum: ['all', 'identity', 'rules', 'footer'], description: 'Which section to print (default all).' },
+          section: { type: 'string', enum: ['all', 'identity', 'rules', 'footer', 'card'], description: 'Which section to print (default all). `card` is the per-turn user message, not a prompt section.' },
         },
       },
       output,
@@ -804,7 +812,8 @@ export function apply(ctx, rawConfig = {}) {
           ? [
               `## identity (order ${SECTION_TABLE[0].order})`, preview.identity, '',
               `## rules (order ${SECTION_TABLE[1].order})`, preview.rules, '',
-              `## footer (order ${SECTION_TABLE[2].order})`, preview.footer,
+              `## footer (order ${SECTION_TABLE[2].order})`, preview.footer, '',
+              '## card (request-time user message, not a section)', preview.card,
             ]
           : [`## ${which}`, preview[which]];
         return {
