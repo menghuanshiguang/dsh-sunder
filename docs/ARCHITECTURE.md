@@ -155,7 +155,7 @@ async function assembleWithSunder(...args) {
 
 这样即使宿主在后来的某个时刻替换了 `assemble`（或者自己用 `defineProperty` 装了个 getter），下一次读到的仍然是带守卫的版本。
 
-### 兜底：waterfall 与定时器
+### 兜底：waterfall（兼给守卫上膛）
 
 访问器只能保护"从服务对象上读 `assemble`"这条路径。真正的保险是第二条路：
 
@@ -168,21 +168,21 @@ ctx.on('system-prompt/assemble', async (...args) => { … }, {
 
 监听器拿到 assembly 后调用 `next()`（末参是函数时），最后同样走一遍 `ensureSunderSections`。**`guard: false` 只关掉访问器，这条 waterfall 仍然在**——所以 `guard: false` 不是"禁用 Sunder 段"，只是换一种更保守的方式参与。
 
-再加两道保险：
+这条 waterfall **还负责给访问器重新上膛**：它在每次组装的最前面调用 `installGuard()`，因为宿主可能换了一个服务代理，旧包装挂在一个已经没人用的对象上。放在这里而不是定时器里，是因为它本来就在需要守卫的那条路径上——零窗口期，也不用维持一个一直跑着的 interval。
 
-- `ctx.on('session/created', …)` 每次新建会话重装一次；
-- `setInterval(installGuard, 4000)`（`unref`）兜住"宿主绕开 setter 直接改 descriptor"的极端情况。
+再加一道保险：
+
+- `ctx.on('session/created', …)` 每次新建会话重装一次。
 
 ### 为什么 dispose 是 noop
 
 `installGuard()` 不注册自己的 `ctx.effect`。原因写在 `index.js` 的注释里：cordis 的 effect cleanup 不只在插件销毁时触发，也会在 **scope 结束、会话边界、preset 切换** 时触发。如果把"解绑 assemble"写成 cleanup，守卫就会在会话中途被拆掉，之后所有请求都回到没有 Sunder 的状态——而且是静默的。
 
-真正需要清理的只有两样，它们各自有 owner：
+真正需要清理的只有一样，它有明确的 owner：
 
 | 资源 | 清理方式 |
 | --- | --- |
-| 4 秒定时器 | `ctx.effect(() => () => clearInterval(timer))` |
-| 500ms 防抖的 state 写入 | 同一个 cleanup 里 `flush()` 落盘 |
+| 500ms 防抖的 state 写入 | `ctx.effect` 的 cleanup 里 `flush()` 落盘 |
 
 也就是说：**"解绑守卫"不是一次事件，插件活多久守卫就该在多久**。真正失效的场景只有插件本身被卸载或 DSH 退出。
 
@@ -290,7 +290,7 @@ applyUpdate
 
 | 文件 | 职责 | 主要导出 |
 | --- | --- | --- |
-| `index.js` | 插件入口：读配置、建段、装守卫、注册工具、定时器、状态持久化 | `name`、`inject`、`apply`、`VERSION` |
+| `index.js` | 插件入口：读配置、建段、装守卫、注册工具、后台检查、状态持久化 | `name`、`inject`、`apply`、`VERSION` |
 | `lib/prompt.js` | 文案与预设 | `PROMPT_VERSION`、`SECTION_ORDERS`、`PRESET_NAMES`、`PRESET`、`resolvePreset()`、`buildPrompt()`、`promptSections()` |
 | `lib/announcements.js` | feed 解码、镜像链、筛选与渲染 | `DEFAULT_FEED`、`DEFAULT_FEED_MIRRORS`、`fetchAnnouncements()`、`selectAnnouncements()`、`renderAnnouncements()` |
 | `lib/update.js` | Releases 查询、缓存、自更新 | `DEFAULT_REPO`、`fetchLatestRelease()`、`checkForUpdate()`、`applyUpdate()`、`isCacheFresh()` |

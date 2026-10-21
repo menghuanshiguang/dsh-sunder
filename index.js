@@ -101,6 +101,9 @@ function renderedSections(prompt) {
   ];
 }
 
+/** Set once when a foreign `complete` takeover is reversed, so the warning is not repeated every assembly. */
+let takeoverWarned = false;
+
 /** Section names this plugin owns; anything else in a one-section assembly is a takeover. */
 const SUNDER_SECTION_NAMES = new Set(['sunder:identity', 'sunder:rules', 'sunder:footer']);
 
@@ -115,6 +118,11 @@ const SUNDER_SECTION_NAMES = new Set(['sunder:identity', 'sunder:rules', 'sunder
 function ensureSunderSections(assembly, sections) {
   if (!assembly || !Array.isArray(assembly.sections)) return assembly;
   if (assembly.sections.length === 1 && !SUNDER_SECTION_NAMES.has(assembly.sections[0]?.name)) {
+    const displaced = String(assembly.sections[0]?.name ?? 'unnamed');
+    if (!takeoverWarned) {
+      takeoverWarned = true;
+      console.warn(`[dsh-sunder] "${displaced}" replaced the whole system prompt with a complete section; sunder reclaimed it.`);
+    }
     return { ...assembly, sections: [...sections] };
   }
   const present = new Set(assembly.sections.map((section) => section?.name));
@@ -143,8 +151,9 @@ const SNAPSHOT_SKIP = new Set(['.git', 'node_modules']);
 
 /**
  * Copy the installed package into `destination` before an in-place update, so
- * `action=apply` can name a directory a user can restore from. Best effort: a
- * failed snapshot (locked file, no permission) never blocks the update itself.
+ * `action=apply` can name a directory a user can restore from. A failure is
+ * reported by omitting `dir`; the caller refuses to update without one unless the
+ * operator explicitly passes `force`.
  *
  * @param {string} source checkout directory
  * @param {string} destination snapshot directory
@@ -204,6 +213,10 @@ const APPLY_NOTES = {
 /** Localized explanation for the error codes `applyUpdate()` returns. */
 const APPLY_ERROR_NOTES = {
   'invalid-repo': { zh: '配置里的 repo 不是 owner/name。', en: 'the configured repo is not owner/name' },
+  'snapshot-failed': {
+    zh: '备份快照没能写出来，已拒绝更新（applyUpdate 自己不保留回滚副本）。确认目标目录可写后重试，或显式传 force=true 跳过备份。',
+    en: 'the backup snapshot could not be written, so the update was refused (applyUpdate keeps no rollback copy of its own). Fix write access to the install directory, or pass force=true to skip the backup explicitly.',
+  },
   'invalid-dir': { zh: '安装目录不可用。', en: 'the install directory is not usable' },
   'invalid-install': { zh: '安装目录里的 package.json 无法解析。', en: 'the installed package.json could not be parsed' },
   'not-a-sunder-install': { zh: '目标目录属于别的插件，拒绝写入。', en: 'the target directory belongs to another package' },
@@ -365,6 +378,10 @@ export function apply(ctx, rawConfig = {}) {
   // is phrased as the user's own instruction because that is what the role means
   // to the model; the system-level authorization narrative stays in the identity
   // section, which is the only place that can carry it.
+  //
+  // TODO(host): if DSH ever exposes a developer- or system-role injection channel
+  // (or lets a plugin append to the in-history system update), move this card
+  // there and keep the user-role path only as the fallback.
   // -------------------------------------------------------------------------
   const injectedTurns = new Map();
   ctx.on('agent/pre-step', async (payload, next) => {
@@ -372,7 +389,9 @@ export function apply(ctx, rawConfig = {}) {
     if (decision.kind === 'reject') return decision;
     if (payload?.step !== 1) return decision;
     // A first step with nothing claimed owns a no-step turn; adding the card
-    // there would turn it into a real request.
+    // there would turn it into a real request. Known boundary: a system-triggered
+    // first step with no user message therefore gets no card — there is no
+    // request to remind the model about.
     if (decision.messages.length === 0) return decision;
     const agentId = payload?.agent?.id ?? 'default';
     if (Number.isFinite(payload?.turn)) {
@@ -478,9 +497,14 @@ export function apply(ctx, rawConfig = {}) {
     }
   };
 
-  // A waterfall listener still covers assemblies created without the guard.
+  // A waterfall listener covers assemblies created without the guard, and
+  // re-arms the guard on every assembly. If the host handed out a fresh service
+  // proxy since the last call, the wrapper has to land on the current one; doing
+  // it here means it happens on the very path that needs it, with no polling
+  // window and no interval to keep alive.
   try {
     ctx.on('system-prompt/assemble', async (...args) => {
+      installGuard();
       const [assembly] = args;
       const next = args.length >= 3 && typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
       let result = assembly;
@@ -505,12 +529,7 @@ export function apply(ctx, rawConfig = {}) {
   } catch {
     /* ignore */
   }
-  const guardTimer = setInterval(() => {
-    installGuard();
-  }, 4000);
-  guardTimer.unref?.();
   ctx.effect(() => () => {
-    clearInterval(guardTimer);
     if (persistTimer !== undefined) {
       clearTimeout(persistTimer);
       persistTimer = undefined;
@@ -703,7 +722,11 @@ export function apply(ctx, rawConfig = {}) {
           action: {
             type: 'string',
             enum: ['check', 'apply'],
-            description: 'check (default) only reports the latest release; apply downloads it and replaces the installed files, leaving a backup snapshot next to the state file.',
+            description: 'check (default) only reports the latest release; apply downloads it and replaces the installed files. apply refuses to run unless a backup snapshot was written first; pass force=true to skip the backup explicitly.',
+          },
+          force: {
+            type: 'boolean',
+            description: 'apply only: proceed even when the backup snapshot could not be written. Without a snapshot there is no rollback path, so this is an explicit acceptance of that risk.',
           },
         },
       },
@@ -731,7 +754,26 @@ export function apply(ctx, rawConfig = {}) {
         // governs background/check requests — and never throws into the harness.
         const target = CHECKOUT_DIR;
         const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
-        const snapshot = snapshotCheckout(target, join(dirname(stateFile), 'backups', `${stamp}-v${VERSION}`));
+        const snapshotPath = join(dirname(stateFile), 'backups', `${stamp}-v${VERSION}`);
+        const snapshot = snapshotCheckout(target, snapshotPath);
+        if (snapshot.dir === undefined && args?.force !== true) {
+          // `applyUpdate()` keeps no rollback copy and never throws, so the
+          // snapshot is the only way back from a half-written install. A missing
+          // backup is a reason to refuse, not a best-effort detail.
+          try {
+            rmSync(snapshotPath, { recursive: true, force: true });
+          } catch {
+            /* a partial copy that cannot be removed is harmless */
+          }
+          return {
+            text: renderApplyReport({
+              result: { ok: false, error: 'snapshot-failed' },
+              language,
+              installed: VERSION,
+              target,
+            }).text,
+          };
+        }
         let result;
         try {
           result = await applyUpdate({
@@ -772,6 +814,9 @@ export function apply(ctx, rawConfig = {}) {
             `think_header_value=${prompt.thinkHeader === null ? '(none)' : prompt.thinkHeader}`,
             `fake_history_chars=${prompt.fakeHistory === null ? 0 : prompt.fakeHistory.length}`,
             `announcements=${config.announcements !== false} limit=${config.announceLimit} bundled_fallback=${config.bundledAnnouncements !== false}`,
+            // required contexts are charged to every assembly, so the running
+            // cost of the announcement block has to be observable.
+            `announcement_chars=${config.announcements === false ? 0 : renderAnnouncements(runtime.unread, language).length} card_chars=${prompt.card.length}`,
             `feed=${config.feedUrl}`,
             `feed_mirrors=${mirrors.length === 0 ? '(built-in only)' : mirrors.join(', ')} builtin_mirrors=${config.builtinMirrors !== false}`,
             `update_check=${config.updateCheck !== false} interval_hours=${config.updateIntervalHours} repo=https://github.com/${config.repo}`,

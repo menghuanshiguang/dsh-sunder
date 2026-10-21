@@ -41,6 +41,19 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
   `section=card`，预览里能直接看到每条 user 消息到底写了什么。卡不注册为系统段——注册就会与
   `rules` 段重复，且位置会被 `order` 拉回中段。
 
+- **守卫不再靠定时器上膛**：删掉 `setInterval(installGuard, 4000)`，改成在
+  `system-prompt/assemble` 这个 waterfall 里每次组装前调用 `installGuard()`。它本来就在需要守卫的
+  那条路径上：没有 4 秒窗口期，也不用维持一个一直跑着的 interval。
+- **更新前备份从"尽力而为"改成硬要求**：快照写不出来就拒绝更新（`error=snapshot-failed`）。
+  `applyUpdate()` 自己不保留回滚副本且从不抛异常，快照是唯一的退路——把备份当 best effort，
+  等于把"可回滚"降级成"希望它别坏"。要跳过必须显式传 `sunder_update action=apply force=true`。
+- **`complete` 顶替不再静默**：`ensureSunderSections` 替换别人的 `complete` 段时 `console.warn`
+  一次（带被顶掉段名）。原来冲突不可见，排查时无从下手。
+- **`sunder_config` 增加开销可见性**：`announcement_chars=` 与 `card_chars=`。两个运行期上下文
+  都是 `required: true`，会进每一次组装，所以它们的字符数必须能被看到。
+- **`agent/pre-step` 注释补两处**：已知边界（无 user message 的首步不注入，例如系统触发的
+  工具调用）与迁移 TODO（宿主若开放 developer/system 注入通道，把规则卡迁过去）。
+
 ### Added
 
 - **每轮规则卡（`agent/pre-step` 注入）**：每个 turn 的第一次请求，把 `RULE_CARD` 作为一条真实

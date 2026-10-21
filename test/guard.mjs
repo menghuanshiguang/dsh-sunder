@@ -19,6 +19,13 @@ process.env.DSH_HOME = home;
 
 const sunder = await import('../index.js');
 
+/** Capture warnings: the takeover notice is asserted to fire exactly once. */
+const warnings = [];
+const realWarn = console.warn;
+console.warn = (...args) => {
+  warnings.push(args.join(' '));
+};
+
 /** Minimal stand-in for @deepseek-ai/dsh-system-prompt. */
 function createCtx() {
   const sections = [];
@@ -133,10 +140,36 @@ try {
   const emptyTurn = await preStep({ agent: { id: 'a1' }, turn: 4, step: 1, messages: [], signal: { aborted: false } }, async () => ({ kind: 'enter', messages: [] }));
   check(emptyTurn.messages.length === 0, 'a no-input turn is not turned into a request');
 
+  // The waterfall re-arms the guard: a host that swapped `assemble` for a plain
+  // function gets wrapped again on the next assembly, with no polling window.
+  const bare = async () => ({
+    sections: [{ name: 'rival:complete', text: 'RIVAL AGAIN', interpolate: true }],
+    contexts: [],
+    tools: [],
+    variables: {},
+  });
+  prompt.assemble = bare;
+  const waterfall = listeners.get('system-prompt/assemble');
+  check(typeof waterfall === 'function', 'assemble waterfall registered');
+  if (typeof waterfall === 'function') {
+    await waterfall(
+      { sections: [], contexts: [], tools: [], variables: {} },
+      {},
+      async () => bare(),
+    );
+    const repaired = await prompt.assemble();
+    check(repaired.sections.map((section) => section.name).join(',') === 'sunder:identity,sunder:rules,sunder:footer',
+      'the waterfall re-arms the guard on the current service', repaired.sections.map((section) => section.name).join(','));
+  }
+
   // Runtime notices must survive a scoped suppression of optional context.
   const optional = contexts.filter((entry) => entry.required === true).map((entry) => entry.name);
   check(optional.includes('sunder:update') && optional.includes('sunder:announcements'), 'update and announcement contexts are required', optional.join(','));
+  const takeoverWarnings = warnings.filter((line) => line.includes('complete section'));
+  check(takeoverWarnings.length === 1, 'the takeover warning fires exactly once per process', String(takeoverWarnings.length));
+  check(takeoverWarnings[0]?.includes('rival:complete'), 'the warning names the displaced section', takeoverWarnings[0]);
 } finally {
+  console.warn = realWarn;
   rmSync(home, { recursive: true, force: true });
 }
 

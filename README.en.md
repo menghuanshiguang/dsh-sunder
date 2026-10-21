@@ -367,14 +367,18 @@ touches the host's check result nor writes the state file.
 **Installing an update** (v1.1.0, `sunder_update action=apply`): resolve
 latest → download a source archive (zip / tar.gz) → on failure fall back to
 fetching every file through the GitHub contents API → **only after the extracted
-`package.json.name === "dsh-sunder"`** write into the install directory. Before
-writing, the current install is snapshotted to
-`$DSH_HOME/sunder/backups/<timestamp>-v<version>`. When already up to date
+`package.json.name === "dsh-sunder"`** write into the install directory. The
+current install is snapshotted to `$DSH_HOME/sunder/backups/<timestamp>-v<version>`
+first, and a snapshot that cannot be written aborts the update
+(`error=snapshot-failed`) — there is no rollback path without it. When already up to date
 nothing changes (`method=up-to-date`, and an unused snapshot is removed); every
 failure returns `{ ok: false, error }` instead of throwing. DSH still has to be
 restarted afterwards.
 
-`action=apply` is an explicit action and is **not** affected by
+`action=apply` refuses to run unless the backup snapshot was written first
+(`error=snapshot-failed`), because `applyUpdate()` keeps no rollback copy of its
+own; pass `force=true` to accept an update with no way back. It is an explicit
+action and is **not** affected by
 `updateCheck: false` — that switch only disables the background poll and
 `action=check`.
 

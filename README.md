@@ -291,7 +291,7 @@ profile 启动
 
 设置页卡片上的"刷新"是**浏览器端**的：客户端自己直连 GitHub API（缓存 6 小时），只刷新那张卡片，不会刷新宿主的检查结果，也不改写状态文件。
 
-**安装更新**（v1.1.0，`sunder_update action=apply`）：解析 latest → 下载源码包（zip / tar.gz）→ 失败则退到 GitHub contents API 逐文件拉取 → **解压结果里 `package.json.name === "dsh-sunder"` 之后**才写进安装目录；写盘前先把当前安装快照到 `$DSH_HOME/sunder/backups/<时间戳>-v<版本>`。已经是最新版本时什么都不改（`method=up-to-date`，没写成时连快照都会删掉）；任何失败都返回 `{ ok: false, error }` 而不是抛异常。装完仍需重启 DSH。
+**安装更新**（v1.1.0，`sunder_update action=apply`）：先快照当前安装到 `$DSH_HOME/sunder/backups/<时间戳>-v<版本>` → 解析 latest → 下载源码包（zip / tar.gz）→ 失败则退到 GitHub contents API 逐文件拉取 → **解压结果里 `package.json.name === "dsh-sunder"` 之后**才写进安装目录。**快照写不出来就拒绝更新**（`error=snapshot-failed`）：`applyUpdate()` 自己不保留回滚副本，没有快照就没有退路。确实要在不可写目录上硬更，显式传 `force: true` 跳过备份。已经是最新版本时什么都不改（`method=up-to-date`，没写成时连快照都会删掉）；任何失败都返回 `{ ok: false, error }` 而不是抛异常。装完仍需重启 DSH。
 
 `action=apply` 是显式动作，**不受 `updateCheck: false` 影响**——那个开关只关掉后台检查和 `action=check`。
 
