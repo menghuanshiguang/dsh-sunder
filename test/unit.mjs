@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 import { compareVersions, inRange, isNewer, parseVersion } from '../lib/version.js';
 import { fetchJson } from '../lib/net.js';
-import { selectAnnouncements, renderAnnouncements, normalizeAnnouncement, localized, DEFAULT_FEED } from '../lib/announcements.js';
+import { selectAnnouncements, renderAnnouncements, normalizeAnnouncement, localized, decodeFeedPayload, fetchAnnouncements, FEED_URLS, DEFAULT_FEED } from '../lib/announcements.js';
 import { checkForUpdate, fetchLatestRelease, isCacheFresh, DEFAULT_REPO } from '../lib/update.js';
 import { buildPrompt, promptSections, SECTION_ORDERS } from '../lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath, emptyState } from '../lib/state.js';
@@ -71,6 +71,36 @@ check(localized({ zh: '中' }, 'en') === '中', 'localized falls back');
 check(renderAnnouncements([{ id: 'z', level: 'info', title: { zh: '标题' }, body: { zh: '正文' }, acknowledged: false }], 'zh').includes('标题'), 'renderAnnouncements renders unread');
 check(renderAnnouncements([{ id: 'z', level: 'info', title: 't', body: 'b', acknowledged: true }], 'zh') === '', 'renderAnnouncements hides acknowledged');
 check(DEFAULT_FEED.endsWith('/announcements.json') === true, 'default feed URL');
+check(FEED_URLS.length >= 2 && FEED_URLS[0] === DEFAULT_FEED, 'mirror list starts with the canonical feed');
+
+// The GitHub contents API answers with { encoding: "base64", content: "…" }.
+const apiPayload = { encoding: 'base64', content: Buffer.from(JSON.stringify(feed), 'utf8').toString('base64') };
+check(Array.isArray(decodeFeedPayload(apiPayload)) && decodeFeedPayload(apiPayload).length === feed.length, 'decodes a GitHub contents API payload');
+check(decodeFeedPayload(JSON.stringify(feed))?.length === feed.length, 'decodes a raw JSON string');
+check(decodeFeedPayload({ nope: true }) === undefined, 'rejects unknown payloads');
+
+const calls = [];
+const fetched = await fetchAnnouncements({
+  url: 'https://primary.invalid/announcements.json',
+  urls: ['https://mirror.invalid/announcements.json'],
+  currentVersion: '1.0.0',
+  limit: 5,
+  fetchJsonImpl: async (url) => {
+    calls.push(url);
+    return calls.length === 1 ? { ok: false, error: 'connection reset' } : { ok: true, data: apiPayload };
+  },
+});
+check(fetched.ok === true && fetched.source === 'https://mirror.invalid/announcements.json', 'fetchAnnouncements falls through to the mirror', JSON.stringify(fetched));
+check(calls.length === 2, 'fetchAnnouncements stops after the first usable source', calls.length);
+check(fetched.ok === true && fetched.items.length === 2, 'mirror payload is filtered like the primary feed', fetched.items?.length);
+
+const failedFeed = await fetchAnnouncements({
+  url: 'https://a.invalid/announcements.json',
+  urls: [],
+  currentVersion: '1.0.0',
+  fetchJsonImpl: async () => ({ ok: false, error: 'offline' }),
+});
+check(failedFeed.ok === false && failedFeed.error === 'offline', 'fetchAnnouncements reports failure when every source fails');
 
 // ---------------------------------------------------------------------------
 // prompt

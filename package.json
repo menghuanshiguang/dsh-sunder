@@ -1,6 +1,6 @@
 {
   "name": "dsh-sunder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sunder: an open-source DSH bundle that swaps the deployment persona for an unrestricted prompt pack, with built-in release announcements and self-update checks.",
   "type": "module",
   "main": "index.js",
@@ -32,6 +32,7 @@
   "scripts": {
     "test": "node test/smoke.mjs && node test/prompt.mjs",
     "release": "node scripts/release.mjs",
+    "publish:api": "node scripts/publish-api.mjs",
     "changelog": "node scripts/release.mjs --changelog"
   },
   "keywords": [

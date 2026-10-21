@@ -6,6 +6,19 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-21
+
+### Added
+
+- Announcement feed mirrors: when `raw.githubusercontent.com` is unreachable the
+  loader retries the GitHub contents API (base64 payload) and the `ghproxy.net`
+  raw mirror, in that order.
+- `feedMirrors` configuration key for extra feed locations.
+- Bundled fallback: when every remote source fails, the `announcements.json`
+  shipped inside the installed package is used, so announcements keep working
+  with no network at all (`bundledAnnouncements: false` disables it).
+- `sunder_status` now reports the feed source and the last feed error.
+
 ## [1.0.0] - 2026-10-21
 
 ### Added
@@ -32,5 +45,6 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 - Offline tests for the version range logic, announcement selection, prompt
   composition, and the real `@deepseek-ai/dsh-system-prompt` integration.
 
-[Unreleased]: https://github.com/menghuanshiguang/dsh-sunder/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/menghuanshiguang/dsh-sunder/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.1
 [1.0.0]: https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.0

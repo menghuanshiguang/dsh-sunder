@@ -13,9 +13,10 @@
  * @module dsh-sunder
  */
 
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
-import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements } from './lib/announcements.js';
+import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements, selectAnnouncements } from './lib/announcements.js';
 import { buildPrompt } from './lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath } from './lib/state.js';
 import { checkForUpdate, DEFAULT_REPO } from './lib/update.js';
@@ -46,6 +47,7 @@ const SECTION_TABLE = [
 const runtime = {
   updateNotice: undefined,
   unread: [],
+  feedSource: undefined,
   feedError: undefined,
 };
 
@@ -56,6 +58,8 @@ const DEFAULTS = {
   announcements: true,
   announceLimit: 3,
   feedUrl: DEFAULT_FEED,
+  feedMirrors: [],
+  bundledAnnouncements: true,
   updateCheck: true,
   updateIntervalHours: 6,
   repo: DEFAULT_REPO,
@@ -296,27 +300,62 @@ export function apply(ctx, rawConfig = {}) {
   // -------------------------------------------------------------------------
   // Background checks: one immediate pass, then the configured cadence.
   // -------------------------------------------------------------------------
+  /**
+   * The packaged feed doubles as the offline fallback: it ships with the
+   * installed version, so announcements still work with no network at all.
+   */
+  const bundledFeed = async () => {
+    try {
+      return JSON.parse(await readFile(new URL('./announcements.json', import.meta.url), 'utf8'));
+    } catch (error) {
+      debug('bundled announcement feed unreadable:', error?.message ?? error);
+      return undefined;
+    }
+  };
+
   const refreshAnnouncements = async () => {
     if (config.announcements === false) return;
     try {
+      const mirrors = Array.isArray(config.feedMirrors) ? config.feedMirrors.filter((url) => typeof url === 'string') : [];
       const result = await fetchAnnouncements({
         url: config.feedUrl,
+        urls: mirrors,
         currentVersion: VERSION,
         limit: config.announceLimit,
         acked: state.ackedAnnouncements,
         timeoutMs: 8000,
       });
-      if (result.ok === false) {
+      let items;
+      let source;
+      if (result.ok === true) {
+        items = result.items;
+        source = result.source;
+        runtime.feedError = undefined;
+      } else {
         runtime.feedError = result.error;
-        debug('announcement feed failed:', result.error);
+        debug('announcement feed failed:', result.error, '— trying the bundled feed');
+        if (config.bundledAnnouncements !== false) {
+          const bundled = await bundledFeed();
+          if (bundled !== undefined) {
+            items = selectAnnouncements(bundled, {
+              currentVersion: VERSION,
+              limit: config.announceLimit,
+              acked: state.ackedAnnouncements,
+            });
+            source = 'bundled';
+          }
+        }
+      }
+      if (items === undefined) {
+        debug('announcements: no source available');
         return;
       }
-      runtime.feedError = undefined;
-      runtime.unread = result.items;
-      for (const item of result.items) markSeen(state, item.id);
+      runtime.unread = items;
+      runtime.feedSource = source;
+      for (const item of items) markSeen(state, item.id);
       state.lastAnnouncementCheck = new Date().toISOString();
       persist();
-      debug(`announcements: ${result.items.length} selected`);
+      debug(`announcements: ${items.length} selected from ${source}`);
     } catch (error) {
       runtime.feedError = String(error?.message ?? error);
     }
@@ -381,7 +420,8 @@ export function apply(ctx, rawConfig = {}) {
             `announcements=${config.announcements === false ? 'off' : `on (unread ${runtime.unread.length})`} update_check=${config.updateCheck === false ? 'off' : 'on'}`,
             `placements=${sections.map((section) => `${section.name}@${section.order}`).join(', ')}`,
             `update=${update}`,
-            `feed=${config.feedUrl}`,
+            `feed=${config.feedUrl} (source=${runtime.feedSource ?? 'none'})`,
+            `feed_error=${runtime.feedError ?? 'none'}`,
             `state=${stateFile}`,
             `repo=https://github.com/${config.repo}`,
           ].join('\n'),

@@ -87,7 +87,9 @@ node D:\dsh\sunder\test\smoke.mjs
 | `extraPrompt` | `""` | extra user rules appended to the Sunder rules section |
 | `announcements` | `true` | fetch and surface the remote announcement feed |
 | `announceLimit` | `3` | maximum unread announcements surfaced per request |
-| `feedUrl` | raw GitHub `announcements.json` | announcement feed location |
+| `feedUrl` | raw GitHub `announcements.json` | primary announcement feed location |
+| `feedMirrors` | `[]` | extra feed URLs tried before the built-in mirrors |
+| `bundledAnnouncements` | `true` | fall back to the `announcements.json` shipped in the package when every remote source fails |
 | `updateCheck` | `true` | check GitHub Releases for a newer version |
 | `updateIntervalHours` | `6` | minimum time between automatic checks |
 | `repo` | `menghuanshiguang/dsh-sunder` | release repository for the update check |
@@ -153,6 +155,24 @@ idempotent.
 Unread announcements appear in the runtime context of every request and can be
 listed or dismissed with the `sunder_notice` tool. A fresh entry is published
 by editing `announcements.json` on `main` — no release required.
+
+### Feed sources
+
+`raw.githubusercontent.com` is blocked on some networks, so the feed is fetched
+with a fallback chain:
+
+1. `feedUrl` (default: `raw.githubusercontent.com/.../announcements.json`)
+2. `feedMirrors`, when configured
+3. the GitHub contents API
+   (`api.github.com/repos/.../contents/announcements.json`, base64 payload)
+4. the `ghproxy.net` raw mirror
+5. the `announcements.json` bundled with the installed package (works fully
+   offline; disable with `bundledAnnouncements: false`)
+
+Every source uses the same `announcements.json` schema, and a failure never
+throws into the host — the next check simply tries again. `sunder_status`
+reports which source answered (`source=bundled`, `source=https://…`) and the
+last error.
 
 ## Update control
 
