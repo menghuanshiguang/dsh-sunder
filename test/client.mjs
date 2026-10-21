@@ -12,7 +12,7 @@
  *   6. 两个槽位组件拿到最小 props 也能渲染不抛（空 store 也不炸）；
  *   7. 桥接数据：pluginManager.listBundles 的版本、pluginInventory 的挂载态、公告未读数；
  *   8. 横幅关闭把 id 写进 localStorage 的 dsh-sunder.dismissed，且已关闭时不再渲染；
- *   9. 纯函数：版本比较、公告筛选（版本区间 / 已读 / 排序 / 条数上限）。
+ *   9. 纯函数：版本比较、公告筛选（版本区间 / 已读 / 排序 / 条数上限；默认上限 3，与宿主 announceLimit 对齐）。
  *
  * Run: node test/client.mjs
  */
@@ -247,9 +247,10 @@ test("导出 inject 是依赖数组 ['slots']", () => {
 
 test('__internals 暴露纯函数与常量', () => {
   const internals = moduleExports.__internals ?? {};
-  for (const key of ['refresh', 'getSnapshot', 'subscribe', 'selectAnnouncements', 'compareVersions', 'PACKAGE_NAME', 'KNOWN_SLOTS']) {
+  for (const key of ['refresh', 'getSnapshot', 'subscribe', 'selectAnnouncements', 'compareVersions', 'ANNOUNCE_LIMIT', 'PACKAGE_NAME', 'KNOWN_SLOTS']) {
     assert.ok(internals[key] !== undefined, `__internals.${key} 缺失`);
   }
+  assert.equal(internals.ANNOUNCE_LIMIT, 3, '__internals.ANNOUNCE_LIMIT 应与宿主 announceLimit 默认值对齐');
   assert.equal(internals.PACKAGE_NAME, 'dsh-sunder');
   assert.ok(internals.KNOWN_SLOTS.has('settings.section'));
   assert.ok(internals.KNOWN_SLOTS.has('shell.overlay'));
@@ -591,6 +592,21 @@ test('selectAnnouncements 在版本未知时不做区间过滤', () => {
   ];
   const selected = internals.selectAnnouncements(entries, { currentVersion: null, acked: new Set(), limit: 5 });
   assert.equal(selected.length, 1);
+});
+
+test('selectAnnouncements 不给 limit 时默认截断 3 条', () => {
+  // ANNOUNCE_LIMIT 由 5 改为 3 后与宿主 announceLimit 默认值一致；这里锁住默认值。
+  assert.equal(internals.ANNOUNCE_LIMIT, 3);
+  const entries = ['d1', 'd2', 'd3', 'd4', 'd5'].map((id, index) => ({
+    id,
+    level: 'info',
+    date: `2026-10-0${index + 1}`,
+    title: id,
+    body: id,
+  }));
+  const selected = internals.selectAnnouncements(entries, { currentVersion: '1.0.1', acked: new Set() });
+  assert.equal(selected.length, 3, `默认应只保留 3 条，实际 ${selected.length}`);
+  assert.deepEqual([...selected.map((item) => item.id)], ['d5', 'd4', 'd3']);
 });
 
 test('subscribe/getSnapshot 成对可用', () => {

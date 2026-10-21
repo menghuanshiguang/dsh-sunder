@@ -126,6 +126,8 @@ prompt section "sunder:identity" is already registered
 
 随包兜底只在**所有远端源都失败**时启用（`bundledAnnouncements: true`）。如果 `source=bundled` 且你确认网络正常，检查 `feedUrl` 是否写错、镜像是否返回了非预期的 HTML（插件会把"不是合法 JSON"当成失败并换下一个源）。
 
+想立刻重拉一遍而不等定时器：调用 `sunder_notice` 并传 `action: "refresh"`。它绕过缓存走完整条源链，返回首行 `refreshed`、`unread=`、`source=`，失败时附 `feed_error=`；成功后 `sunder_status` 里的 `feed_error=` 也会恢复 `none`。
+
 ## 5. 更新检查 403 与限流
 
 **症状**：`sunder_status` 的更新一栏是 `error`；`sunder_update` 返回 `update check failed: 403 Forbidden` 或 `API rate limit exceeded`。
@@ -145,7 +147,7 @@ prompt section "sunder:identity" is already registered
 3. **强制再试一次**：`sunder_update` 会绕过缓存。
 4. **换源**：改 `repo` 指向你自己的镜像仓库；或 `updateCheck: false` 完全关掉，需要时手动看 Releases。
 5. **改了 `updateIntervalHours` 没反应**：下限是 1 小时（`Math.max(1, …)`），写成 0.1 会按 1 小时算。
-6. **面板里"安装更新"失败**（v1.1.0 的 `applyUpdate`）：检查 API 通了、下载却 403，通常是网关只放行 `api.github.com`、拦了源码包域名（`codeload.github.com` 一类）。插件在这种情况下会退到 contents API 逐文件拉取；两条路都失败才报 `{ ok: false, error, url }`，此时看错误里带的 `url` 直接手动下载。已有安装不会被写坏——它是先校验包名再落盘。
+6. **`sunder_update action=apply` 失败**（`applyUpdate`）：检查 API 通了、下载却 403，通常是网关只放行 `api.github.com`、拦了源码包域名（`codeload.github.com` 一类）。插件在这种情况下会退到 contents API 逐文件拉取；两条路都失败才报 `{ ok: false, error, url }`，此时看错误里带的 `url` 直接手动下载。已有安装不会被写坏——它是先校验包名再落盘；真要回滚，用工具报告里的 `backup=` 路径覆盖回去再重启。
 
 更新检查失败**不影响插件其他功能**：三段提示词、公告、工具都照常。
 
@@ -176,6 +178,17 @@ node scripts/install.mjs --dry-run     # 只看计划
 删 `$DSH_HOME\sunder\state.json`（默认 `~/.dsh/sunder/state.json`），下次启动会重新生成。
 
 ## 7. 怎么收集诊断信息
+
+先跑内置诊断（只读，不改任何文件）：
+
+```powershell
+npm run doctor                      # 或 node scripts/doctor.mjs
+node scripts/doctor.mjs --json      # 机器可读
+node scripts/doctor.mjs --no-network
+node scripts/doctor.mjs --profile <profile 目录> --runtime <DSH 运行时目录>
+```
+
+10 项检查：`node`/`profile`/`bundle`/`link`/`manifest`/`composition`/`feed`/`update`/`state`/`version`。退出码 `0` 健康（`warn` 不算失败）、`1` 有 `fail`、`2` 用法错误。输出里每项的 `id` 对应下面各节。
 
 提 issue 前把这些贴进来，基本就能定位：
 
@@ -214,5 +227,8 @@ Get-Content "<profile>\cordis.patch.yml" | Select-String -Context 0,10 'id: sund
 | 提示词段在，但感觉没生效 | 先确认宿主身份段真的关了：`cordis.patch.yml` 里 `includeHarnessIdentity: false`；再看 `placements=` |
 | 状态文件在别处 | 设置了 `DSH_HOME` 的话，路径是 `$DSH_HOME/sunder/state.json` |
 | 想确认 guard 在不在 | `sunder_status` 的 `guard=on`；`guard: false` 时 waterfall 兜底仍会在，但访问器不装 |
+| 面板只显示 3 条公告 | 客户端横幅上限固定 3 条，和宿主默认 `announceLimit: 3` 对齐；想多看就把 `announceLimit` 调大，或用 `sunder_notice action=list` |
+| 面板里语言/预设显示"未知" | 正常：客户端只能读 `pluginManager`/`pluginInventory`，读不到 config schema。以 `cordis.patch.yml` 与 `sunder_status` 为准 |
+| `doctor` 报 `profile` fail | 传 `--profile <真实 profile 目录>`；默认值按 `DSH_HOME` 推导，`DSH_HOME` 为空时是 `~/.dsh/profiles/desktop` |
 
 还搞不定 → 开 issue，附上[第 7 节](#7-怎么收集诊断信息)的材料。设计层面的"为什么这样"看 [ARCHITECTURE](./ARCHITECTURE.md)。

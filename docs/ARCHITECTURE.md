@@ -250,9 +250,9 @@ checkForUpdate
 
 两条链都在插件启动时立刻跑一次，之后每 `max(1, updateIntervalHours) * 3600_000` 毫秒跑一次（定时器 `unref`，不阻止进程退出）。
 
-### 应用更新（v1.1.0）
+### 应用更新（v1.1.0 引入，1.2.0 起由工具触发）
 
-`checkForUpdate` 只回答"有没有新版本"。真正动手的是 `lib/update.js` 的 `applyUpdate({ dir, ... })`，它被 v1.1.0 的设置面板调用：
+`checkForUpdate` 只回答"有没有新版本"。真正动手的是 `lib/update.js` 的 `applyUpdate({ dir, ... })`，它由 `sunder_update` 的 `action: "apply"` 分支调用，调用前先做快照：
 
 ```
 applyUpdate
@@ -266,6 +266,8 @@ applyUpdate
 ```
 
 失败返回 `{ ok: false, error, url?, detail? }`，**永不抛异常**；因为先校验包名再写盘，下到半截文件或错误内容时现有安装不会被污染。安装目录写在 profile 的 `node_modules/dsh-sunder`（junction / 复制目录），所以更新之后仍需重启 DSH。
+
+工具侧在调用前用 `snapshotCheckout()` 把 checkout 复制到 `%DSH_HOME%\sunder\backups\<时间戳>\`（跳过 `.git` 与 `node_modules`）。`applyUpdate` **自身不备份**，覆盖也不是原子的：中途失败只能靠这份快照回滚，工具输出里的 `backup=` 就是它的路径。
 
 ## 6. 失败模式
 
@@ -298,13 +300,19 @@ applyUpdate
 | `announcements.json` | 随包兜底 feed | —— |
 | `cordis.patch.yml` | bundle patch | —— |
 | `locale/*.json` | 客户端面板文案（v1.1.0） | —— |
+| `lib/client.js` | 客户端 UI：设置页只读卡片 + 公告横幅（`window.__ModuleLoader__` 形态） | —— |
 | `scripts/install.mjs` | 安装 / 卸载（v1.1.0） | `install()`、`uninstall()`（`scripts/uninstall.mjs`）、`parseArgs()` |
+| `scripts/doctor.mjs` | 只读诊断 CLI（v1.2.0，10 项检查） | `runDoctor()`、`renderReport()`、`defaultProfileDir()` |
 | `scripts/release.mjs` | 发版：bump、CHANGELOG、tag、Release | —— |
+| `scripts/publish-api.mjs` | 无 git 推送时的 API 发布（树/提交/ref/tag/Release） | —— |
 | `scripts/check-package.mjs` | 打包契约检查 | —— |
-| `test/*.mjs` | 单元、提示词、冒烟、安装、更新、客户端 | —— |
+| `test/*.mjs` | 单元、提示词、客户端、安装、更新、doctor、冒烟 | —— |
 
 ## 相关文档
 
 - [README](../README.md)：安装、配置表、工具用法
+- [README.en.md](../README.en.md)：English
+- [PROMPTS](./PROMPTS.md)：三档预设与提示词设计
 - [TROUBLESHOOTING](./TROUBLESHOOTING.md)：常见症状与诊断
+- [CONTRIBUTING](../CONTRIBUTING.md) / [SECURITY](../SECURITY.md)
 - [CHANGELOG](../CHANGELOG.md)：版本变化

@@ -66,6 +66,8 @@ const DEFAULTS = {
   enabled: true,
   language: 'auto',
   preset: 'full',
+  thinkHeader: false,
+  fakeHistory: false,
   extraPrompt: '',
   announcements: true,
   announceLimit: 3,
@@ -267,6 +269,8 @@ export function apply(ctx, rawConfig = {}) {
   const prompt = buildPrompt({
     language,
     preset: config.preset,
+    thinkHeader: config.thinkHeader,
+    fakeHistory: config.fakeHistory,
     extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
     version: VERSION,
   });
@@ -570,12 +574,13 @@ export function apply(ctx, rawConfig = {}) {
         return {
           text: [
             `dsh-sunder ${VERSION}`,
-            `language=${language} preset=${config.preset} sections=on guard=${config.guard === false ? 'off' : 'on'}`,
+            `language=${language} preset=${config.preset} think_header=${prompt.thinkHeader === null ? 'off' : `on (${prompt.thinkHeader})`} fake_history=${prompt.fakeHistory === null ? 'off' : 'on'} sections=on guard=${config.guard === false ? 'off' : 'on'}`,
             `announcements=${config.announcements === false ? 'off' : `on (unread ${runtime.unread.length})`} update_check=${config.updateCheck === false ? 'off' : 'on'}`,
             `placements=${sections.map((section) => `${section.name}@${section.order}`).join(', ')}`,
             `update=${update}`,
             `feed=${config.feedUrl} (source=${runtime.feedSource ?? 'none'})`,
             `feed_error=${runtime.feedError ?? 'none'}`,
+            `announce_limit=${config.announceLimit ?? 3}`,
             `state=${stateFile}`,
             `repo=https://github.com/${config.repo}`,
           ].join('\n'),
@@ -585,18 +590,33 @@ export function apply(ctx, rawConfig = {}) {
 
     ctx.tools.register({
       name: 'sunder_notice',
-      description: 'List or acknowledge dsh-sunder announcements from the remote feed. Actions: list (default) | ack id | ack-all.',
+      description: 'List, acknowledge, or refresh dsh-sunder announcements from the remote feed. Actions: list (default) | ack id | ack-all | refresh. refresh re-fetches the feed immediately instead of reusing the cached runtime state.',
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          action: { type: 'string', enum: ['list', 'ack', 'ack-all'], description: 'list shows unread announcements; ack dismisses one id; ack-all dismisses every unread one.' },
+          action: { type: 'string', enum: ['list', 'ack', 'ack-all', 'refresh'], description: 'list shows unread announcements; ack dismisses one id; ack-all dismisses every unread one; refresh re-fetches the feed right now and reports unread=<n>, source=<url|bundled|none>, plus feed_error=<...> when the fetch failed.' },
           id: { type: 'string', description: 'Announcement id for action=ack.' },
         },
       },
       output,
       async execute(args = {}) {
         const action = args?.action ?? 'list';
+        if (action === 'refresh') {
+          // 立刻重拉 feed（走 announceLimit 与 state 里的已读集合），再用刷新后的
+          // runtime 状态回报结果；feed 失败时 refreshAnnouncements 已把原因写进
+          // runtime.feedError，与 sunder_status 的 feed_error= 行同源。
+          await refreshAnnouncements();
+          const lines = [
+            'refreshed',
+            `unread=${runtime.unread.length}`,
+            `source=${runtime.feedSource ?? 'none'}`,
+          ];
+          if (runtime.feedError !== undefined && runtime.feedError !== null) {
+            lines.push(`feed_error=${runtime.feedError}`);
+          }
+          return { text: lines.join('\n') };
+        }
         if (action === 'ack' || action === 'ack-all') {
           const targets = action === 'ack-all' ? runtime.unread.map((item) => item.id) : [args?.id].filter((id) => typeof id === 'string' && id.length > 0);
           if (targets.length === 0) return { text: action === 'ack' ? 'ERROR: id is required for action=ack' : 'no unread announcements' };
@@ -684,7 +704,9 @@ export function apply(ctx, rawConfig = {}) {
           text: [
             `dsh-sunder ${VERSION}`,
             `enabled=${config.enabled !== false}`,
-            `language=${language} (raw ${String(config.language)}) preset=${config.preset}`,
+            `language=${language} (raw ${String(config.language)}) preset=${config.preset} think_header=${prompt.thinkHeader === null ? 'off' : 'on'} fake_history=${prompt.fakeHistory === null ? 'off' : 'on'}`,
+            `think_header_value=${prompt.thinkHeader === null ? '(none)' : prompt.thinkHeader}`,
+            `fake_history_chars=${prompt.fakeHistory === null ? 0 : prompt.fakeHistory.length}`,
             `announcements=${config.announcements !== false} limit=${config.announceLimit} bundled_fallback=${config.bundledAnnouncements !== false}`,
             `feed=${config.feedUrl}`,
             `feed_mirrors=${mirrors.length === 0 ? '(built-in only)' : mirrors.join(', ')} builtin_mirrors=${config.builtinMirrors !== false}`,
@@ -716,6 +738,8 @@ export function apply(ctx, rawConfig = {}) {
         const preview = buildPrompt({
           language: previewLanguage,
           preset: previewPreset,
+          thinkHeader: config.thinkHeader,
+          fakeHistory: config.fakeHistory,
           extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
           version: VERSION,
         });
@@ -729,7 +753,7 @@ export function apply(ctx, rawConfig = {}) {
           : [`## ${which}`, preview[which]];
         return {
           text: [
-            `language=${previewLanguage} preset=${previewPreset} version=${VERSION}`,
+            `language=${previewLanguage} preset=${previewPreset} think_header=${preview.thinkHeader === null ? 'off' : `on (${preview.thinkHeader})`} fake_history=${preview.fakeHistory === null ? 'off' : 'on'} version=${VERSION}`,
             ...parts,
           ].join('\n'),
         };
@@ -737,5 +761,5 @@ export function apply(ctx, rawConfig = {}) {
     });
   }
 
-  console.info(`[dsh-sunder] v${VERSION} active — language=${language}, preset=${config.preset}, prompt sections registered, guard=${config.guard === false ? 'off' : 'on'}`);
+  console.info(`[dsh-sunder] v${VERSION} active — language=${language}, preset=${config.preset}, think_header=${prompt.thinkHeader === null ? 'off' : 'on'}, fake_history=${prompt.fakeHistory === null ? 'off' : 'on'}, prompt sections registered, guard=${config.guard === false ? 'off' : 'on'}`);
 }

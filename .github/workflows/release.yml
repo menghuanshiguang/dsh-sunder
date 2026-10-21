@@ -4,23 +4,207 @@ on:
   push:
     tags:
       - 'v*'
+  # 可选：手动补发 / 重发某个已存在的 tag。
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已存在的 tag，例如 v1.2.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
+# 同一个 tag 的发布不允许并发取消：已经写出去的 Release 不该被中途打断。
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release:
+    name: 发布 GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出仓库（含全部历史与 tag）
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+          fetch-tags: true
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit tests
-        run: node test/unit.mjs
-      - name: Publish GitHub release
+
+      # inputs.tag 只经 env 进脚本，不拼进 shell 源码。
+      - name: 解析 tag
+        id: meta
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$REF_NAME}"
+          case "$tag" in
+            v[0-9]*) ;;
+            *) printf '::error title=bad-tag::tag <%s> is not v<semver>\n' "$tag"; exit 1 ;;
+          esac
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          printf 'resolved tag: %s\n' "$tag"
+          # push:tags 时 checkout 已经停在该 tag；workflow_dispatch 时停的是分支，
+          # 这里切到 tag，保证下面读到的 package.json / CHANGELOG 就是被发布的那份。
+          if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+            git checkout --quiet "$tag"
+            printf 'checked out tag %s\n' "$tag"
+          else
+            printf '::warning title=tag-not-fetched::tag %s is not available locally; verifying against %s\n' "$tag" "${REF_NAME}"
+          fi
+
+      - name: 校验 tag 与 package.json 版本一致
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/verify-version.mjs"
+          cat > "$work" <<'NODE'
+          import { readFileSync } from 'node:fs';
+
+          const tag = (process.env.TAG ?? '').trim();
+          const version = String(JSON.parse(readFileSync('package.json', 'utf8')).version ?? '').trim();
+          const fromTag = tag.replace(/^refs\/tags\//u, '').replace(/^v/u, '');
+
+          console.log(`tag:           ${tag}`);
+          console.log(`tag -> semver: ${fromTag}`);
+          console.log(`package.json:  ${version}`);
+
+          if (version === '') {
+            console.error('::error title=bad-package::package.json has no version');
+            process.exit(1);
+          }
+          if (fromTag !== version) {
+            console.error(`::error title=version-mismatch::tag ${tag} (expects v${version}) != package.json version ${version}`);
+            process.exit(1);
+          }
+          console.log(`::notice title=version-ok::tag ${tag} matches package.json ${version}`);
+          NODE
+          node "$work"
+
+      - name: 打包契约检查（scripts/check-package.mjs）
+        run: node scripts/check-package.mjs
+
+      # 从 CHANGELOG.md 抽当前版本段，纯 node 实现（不依赖 sed/awk 的 GNU 方言）。
+      # 顺序：精确版本段 -> [Unreleased]（keep-a-changelog 把待发布内容放这里）
+      #       -> 上一版 tag..本 tag 的 git log。
+      # 每降一级都打 ::warning，并把来源写进正文末尾，绝不静默发出无来源的 notes。
+      - name: 从 CHANGELOG 抽取 release notes
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/extract-notes.mjs"
+          cat > "$work" <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+
+          const tag = (process.env.TAG ?? '').trim();
+          const notesFile = process.env.NOTES_FILE;
+          const version = tag.replace(/^refs\/tags\//u, '').replace(/^v/u, '');
+          if (!notesFile) throw new Error('NOTES_FILE is not set');
+          if (version === '') throw new Error(`cannot derive a version from tag "${tag}"`);
+
+          const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+          // CHANGELOG -> 有序的 heading 列表 + heading 到正文的映射。
+          const headings = [];
+          const bodies = new Map();
+          if (existsSync('CHANGELOG.md')) {
+            let current = null;
+            for (const line of readFileSync('CHANGELOG.md', 'utf8').replace(/\r\n?/gu, '\n').split('\n')) {
+              const match = /^##\s+(.+?)\s*$/u.exec(line);
+              if (match) {
+                current = match[1];
+                headings.push(current);
+                bodies.set(current, []);
+                continue;
+              }
+              if (current !== null) bodies.get(current).push(line);
+            }
+          }
+
+          const clean = (lines) => lines
+            .filter((line) => !/^\s*\[[^\]]+\]:\s*\S+/u.test(line)) // 文末链接定义
+            .join('\n')
+            .replace(/\n{3,}/gu, '\n\n')
+            .trim();
+
+          // 1) 精确版本段，兼容 "[1.2.0]" / "[1.2.0] - 2026-10-21" / "v1.2.0" / "1.2.0"
+          const wanted = new RegExp(`^\\[?v?${escapeRe(version)}\\]?(?:\\s|$)`, 'u');
+          const exact = headings.find((heading) => wanted.test(heading));
+          let notes = exact === undefined ? '' : clean(bodies.get(exact));
+          let source = exact === undefined ? '' : `CHANGELOG.md 的 "## [${version}]" 段`;
+
+          // 2) [Unreleased]
+          if (notes === '') {
+            const unreleased = headings.find((heading) => /^\[?unreleased\]?$/iu.test(heading));
+            if (unreleased !== undefined) {
+              const body = clean(bodies.get(unreleased));
+              if (body !== '') {
+                notes = body;
+                source = 'CHANGELOG.md 的 "## [Unreleased]" 段';
+                console.log(`::warning title=notes-unreleased::CHANGELOG.md has no "${version}" section; falling back to [Unreleased]`);
+              }
+            }
+          }
+
+          // 3) 兜底：上一版 tag..本 tag 的提交标题
+          if (notes === '') {
+            try {
+              const previous = execFileSync('git', ['describe', '--tags', '--abbrev=0', `${tag}^`], { encoding: 'utf8' }).trim();
+              const log = execFileSync('git', ['log', '--no-merges', '--pretty=format:- %s (%h)', `${previous}..${tag}`], { encoding: 'utf8' }).trim();
+              if (log !== '') {
+                notes = log;
+                source = `git log ${previous}..${tag}`;
+                console.log(`::warning title=notes-git::CHANGELOG.md has no usable section; falling back to git log ${previous}..${tag}`);
+              }
+            } catch (error) {
+              console.log(`git log fallback unavailable: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+
+          if (notes === '') {
+            const available = headings.length === 0 ? '(no "## " headings)' : headings.join(' / ');
+            console.error(`::error title=changelog::no notes for ${version}: CHANGELOG.md has no matching section, [Unreleased] is empty and git history yielded nothing. Headings: ${available}`);
+            process.exit(1);
+          }
+
+          writeFileSync(notesFile, `${notes}\n\n---\n\n_notes source: ${source}; tag ${tag}_\n`, 'utf8');
+          console.log(`notes: ${notes.length} chars from ${source} -> ${notesFile}`);
+          if (process.env.GITHUB_STEP_SUMMARY) {
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### dsh-sunder ${tag}\n\n${notes}\n`);
+          }
+          NODE
+          node "$work"
+
+      # 幂等：release 已存在就走 edit，否则 create（--verify-tag 保证远端真有这个 tag）。
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        run: |
+          set -euo pipefail
+          title="dsh-sunder $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists; updating via gh release edit"
+            gh release edit "$TAG" --title "$title" --notes-file "$NOTES_FILE"
+          else
+            echo "creating release $TAG"
+            gh release create "$TAG" --title "$title" --notes-file "$NOTES_FILE" --verify-tag
+          fi
+          gh release view "$TAG" --json url --jq '.url'

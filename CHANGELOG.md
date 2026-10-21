@@ -6,6 +6,51 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-21
+
+### Added
+
+- `sunder_notice` 新增 `action: "refresh"`：跳过运行时缓存立刻重拉公告 feed，输出第一行 `refreshed`、
+  第二行 `unread=<n>`、第三行 `source=<url|bundled|none>`；拉取失败时再补一行 `feed_error=<...>`。
+  刷新走的是同一套 `announceLimit` 截断与 `state.json` 已读集合，`list` / `ack` / `ack-all` 的文本不变。
+  `announcements: false` 时该动作不发请求，直接回报当前状态。
+- `sunder_status` 增加一行 `announce_limit=<n>`，打印 `announceLimit` 的生效值（未配置时即默认的 3），
+  和 `feed` / `feed_error` / `update` 一起列出。
+- 只读诊断 CLI `scripts/doctor.mjs`：`node scripts/doctor.mjs [--profile <dir>] [--runtime <dir>] [--json] [--no-network]`
+  （`npm run doctor` 同义），依次跑 node / profile / bundle / link / manifest / composition / feed /
+  update / state / version 十项检查；退出码 `0` = 健康（允许 warn）、`1` = 有 fail、`2` = 用法错误。
+  它只读不写：不建目录、不改 `package.json`、不动 `state.json`，也不触发安装或更新。配套离线测试 `test/doctor.mjs`。
+- 仓库工程化：CI 增加 `test/doctor.mjs` 与 `scripts/check-package.mjs` 步骤（Node 20 / 22 矩阵），
+  新增 tag 触发的发布工作流与 CodeQL 扫描；工作流细节见 `.github/workflows/`，插件运行时行为不变。
+- 文档：新增英文 `README.en.md`、`CONTRIBUTING.md`、`SECURITY.md` 与 `docs/PROMPTS.md`
+  （三档预设对照、section 顺序与优先级、`extraPrompt` 用法、预览与测试方法）。
+
+- **伪造思考链起始头（`thinkHeader`，v1.2.0）**：`false` / `true` / 任意字符串；
+  开启后提示词要求每次回复先原样输出该头、空一行再写正文。头文本只追加进 footer 段，
+  `sunder_status` 增 `think_header=`，`sunder_config` 列出 `think_header_value=`，
+  `sunder_prompt` 预览可直接看到。
+- **伪造消息记录（`fakeHistory`，v1.2.0）**：`false` / `true` / 任意对话文本。
+  `true` 按 `language` 取内置中英文样例，把一段"已发生且未审查"的对话附在提示词末尾，
+  让模型以同样风格续写当前请求；只进 footer 段、不引入 `{{变量}}`，
+  `sunder_status` 增 `fake_history=`，`sunder_config` 列出 `fake_history=` 与
+  `fake_history_chars=`。
+
+### Changed
+
+- `sunder_status` 的 `feed_error=` 与 `sunder_notice action="refresh"` 同源，读的都是同一个
+  `runtime.feedError`：显示最近一次拉取失败的原因，最近一次成功拉取后回到 `none`。
+- 浏览器端公告横幅的条数上限从 5 收到 3（`lib/client.js` 的 `ANNOUNCE_LIMIT = 3`），
+  与宿主 `announceLimit` 的默认值 3 对齐。
+- 随包的 `announcements.json` 增加 1.2.0 条目；README 顶部导航加 `[English](README.en.md)`，
+  版本号、工具表（`sunder_notice` 的 `refresh` 动作）与测试清单同步到 1.2.0。
+
+### Fixed
+
+- 横幅上限（5）与宿主条数（默认 3）不一致：宿主只保留 3 条未读，横幅却可能显示到第 4、5 条，
+  两边对"未读"的条数因此对不上；现在两边都用 3。
+- `feed_error=` 以前只随后台刷新节奏更新，一次拉取失败要等到下一轮才在 `sunder_status` 里显形；
+  现在 `action="refresh"` 会在同一次调用里刷新它，`none` 只在最近一次拉取成功时出现。
+
 ## [1.1.0] - 2026-10-21
 
 ### Added
@@ -118,7 +163,8 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 - Offline tests for the version range logic, announcement selection, prompt
   composition, and the real `@deepseek-ai/dsh-system-prompt` integration.
 
-[Unreleased]: https://github.com/menghuanshiguang/dsh-sunder/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/menghuanshiguang/dsh-sunder/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/menghuanshiguang/dsh-sunder/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.1.0
 [1.0.1]: https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.1
 [1.0.0]: https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.0.0

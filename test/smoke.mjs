@@ -10,6 +10,8 @@
  *   3. the guard survives a competing `complete: true` section
  *   4. repeated assemblies do not nest the guard (no proxy blow-up)
  *   5. the tools are registered against the real tool-service contract
+ *   6. sunder_notice exposes action=refresh and sunder_status reports
+ *      announce_limit (schema + non-networked execution path only)
  *
  * Run: node test/smoke.mjs
  * Env: DSH_RUNTIME_DIR (default D:/DSHPC/resources/app/dsh)
@@ -172,6 +174,52 @@ check(
 check(tools.every((tool) => typeof tool.execute === 'function'), 'every tool exposes execute');
 check(tools.every((tool) => tool.output && typeof tool.output.render === 'function'), 'every tool exposes output.render');
 check(tools.every((tool) => tool.parameters && tool.parameters.type === 'object'), 'every tool exposes an object parameter schema');
+
+// ---------------------------------------------------------------------------
+// 1.2.0: sunder_notice gained action=refresh; sunder_status gained announce_limit.
+// No network is touched below: this smoke run applies the bundle with
+// announcements:false, so refreshAnnouncements() returns before any fetch.
+// ---------------------------------------------------------------------------
+const noticeTool = tools.find((tool) => tool.name === 'sunder_notice');
+const noticeEnum = noticeTool?.parameters?.properties?.action?.enum;
+check(
+  Array.isArray(noticeEnum) && noticeEnum.includes('refresh'),
+  "sunder_notice exposes action=...|refresh",
+  Array.isArray(noticeEnum) ? noticeEnum.join('|') : String(noticeEnum),
+);
+check(
+  ['list', 'ack', 'ack-all'].every((action) => Array.isArray(noticeEnum) && noticeEnum.includes(action)),
+  'sunder_notice keeps action=list|ack|ack-all',
+  Array.isArray(noticeEnum) ? noticeEnum.join('|') : String(noticeEnum),
+);
+check(
+  typeof noticeTool?.description === 'string' && /refresh/i.test(noticeTool.description),
+  'sunder_notice description documents refresh',
+  String(noticeTool?.description),
+);
+
+if (noticeTool !== undefined && typeof noticeTool.execute === 'function') {
+  const refreshed = await noticeTool.execute({ action: 'refresh' });
+  const refreshedLines = String(refreshed?.text ?? '').split('\n');
+  check(refreshedLines[0] === 'refreshed', 'sunder_notice action=refresh starts with refreshed', refreshedLines.join('|'));
+  check(refreshedLines.includes('unread=0'), 'sunder_notice action=refresh reports unread=<n>', refreshedLines.join('|'));
+  check(refreshedLines.includes('source=none'), 'sunder_notice action=refresh reports source=<...>', refreshedLines.join('|'));
+  check(
+    refreshedLines.every((line) => line.startsWith('feed_error=') === false),
+    'sunder_notice action=refresh omits feed_error when nothing failed',
+    refreshedLines.join('|'),
+  );
+  const listed = await noticeTool.execute({ action: 'list' });
+  check(String(listed?.text) === 'no unread announcements', 'sunder_notice action=list keeps its 1.1.0 text', String(listed?.text));
+}
+
+const statusTool = tools.find((tool) => tool.name === 'sunder_status');
+if (statusTool !== undefined && typeof statusTool.execute === 'function') {
+  const statusLines = String((await statusTool.execute({}))?.text ?? '').split('\n');
+  check(statusLines.includes('announce_limit=3'), 'sunder_status reports announce_limit=3', statusLines.join('|'));
+  check(statusLines.some((line) => line.startsWith('feed=')), 'sunder_status keeps the feed= line', statusLines.join('|'));
+  check(statusLines.includes('feed_error=none'), 'sunder_status keeps the feed_error= line', statusLines.join('|'));
+}
 
 ctx.dispose?.();
 rmSync(stateHome, { recursive: true, force: true });

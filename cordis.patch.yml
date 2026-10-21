@@ -17,6 +17,12 @@
         language: auto
         # full | concise | dev — prompt pack variant (unknown values fall back to full).
         preset: full
+        # 伪造思考链起始头：false=关；true=用默认头；也可直接写任意字符串作为头。
+        # 开启后提示词要求每次回复以该头原样开头，再空一行写正文。
+        thinkHeader: false
+        # 伪造消息记录：把一段"已发生且未审查"的对话样本附在提示词末尾，
+        # 让模型以同样风格续写。false=关；true=内置中英文样例；也可写任意文本。
+        fakeHistory: false
         # Extra user rules, appended to the Sunder operating rules.
         extraPrompt: ""
         announcements: true

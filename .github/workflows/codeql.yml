@@ -1,0 +1,43 @@
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每周一 04:23 UTC（错开整点，避开 runner 排队高峰）。
+    - cron: '23 4 * * 1'
+
+# 顶层只给读；真正需要的 security-events: write 放在 job 上（job 级会覆盖顶层）。
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 纯 ESM、零依赖、没有构建步骤：不需要 autobuild，init 之后直接 analyze。
+      - name: 初始化 CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - name: 执行 CodeQL 分析
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

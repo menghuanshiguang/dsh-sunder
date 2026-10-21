@@ -4,26 +4,40 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
+# 测试只读仓库：CI 不需要任何写权限。
 permissions:
   contents: read
 
+# 同一分支 / PR 上新的推送取消正在跑的旧任务。
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# windows-latest 上 pwsh 就是 PowerShell 7。GitHub 会在脚本末尾追加
+# `exit $LASTEXITCODE`，所以「一个步骤只跑一条 node 命令」时，命令失败即步骤失败。
+# 下面每个测试因此各自单独一步：既让失败点一眼可见，也避免多命令步骤里
+# 中间命令的退出码被后面成功的命令吞掉。
+defaults:
+  run:
+    shell: pwsh
 
 jobs:
   test:
-    name: node ${{ matrix.node }}
+    name: tests (windows-latest, node ${{ matrix.node }})
     runs-on: windows-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         node: [20, 22]
     steps:
-      - name: 检出
+      - name: 检出仓库
         uses: actions/checkout@v4
 
+      # 零运行时依赖、仓库里没有 package-lock.json：setup-node 的 cache 需要依赖
+      # 清单来算 key，所以这里只装 Node，不配置 cache。
       - name: 安装 Node ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
@@ -32,36 +46,55 @@ jobs:
       - name: 环境信息
         run: |
           node --version
-          node -e "console.log(process.platform, process.arch)"
+          npm --version
+          node -e "console.log('platform=%s arch=%s cwd=%s', process.platform, process.arch, process.cwd())"
 
       - name: 单元测试（test/unit.mjs）
-        if: ${{ hashFiles('test/unit.mjs') != '' }}
         run: node test/unit.mjs
 
       - name: 提示词测试（test/prompt.mjs）
-        if: ${{ hashFiles('test/prompt.mjs') != '' }}
         run: node test/prompt.mjs
 
-      - name: 安装脚本测试（test/install.mjs）
-        if: ${{ hashFiles('test/install.mjs') != '' }}
-        run: node test/install.mjs
-
-      - name: 更新测试（test/update.mjs）
-        if: ${{ hashFiles('test/update.mjs') != '' }}
-        run: node test/update.mjs
-
       - name: 客户端测试（test/client.mjs）
-        if: ${{ hashFiles('test/client.mjs') != '' }}
         run: node test/client.mjs
 
-      - name: 报告缺失的测试
-        shell: pwsh
+      - name: 安装脚本测试（test/install.mjs）
+        run: node test/install.mjs
+
+      - name: 更新流程测试（test/update.mjs）
+        run: node test/update.mjs
+
+      - name: Doctor 测试（test/doctor.mjs）
+        run: node test/doctor.mjs
+
+      # ---- test/smoke.mjs 需要真实 DSH 运行时 --------------------------------
+      # 锚点与 test/smoke.mjs 顶部的判定完全一致：
+      #   ${DSH_RUNTIME_DIR:-D:/DSHPC/resources/app/dsh}/node_modules/@deepseek-ai/dsh-system-prompt/lib/index.js
+      # DSH_RUNTIME_DIR 是唯一的可调环境变量（反斜杠会被归一成 /）。GitHub 的
+      # runner 上没有桌面版 DSH，所以这里正常会走「跳过 + notice」分支。
+      # smoke.mjs 自己在锚点缺失时也会 process.exit(0)（见 test/smoke.mjs 顶部），
+      # 探测只负责把跳过原因显式写进 UI，并保证真的有运行时时一定会跑。
+      - name: 探测 DSH 运行时
+        id: runtime
         run: |
-          $missing = @('test/unit.mjs', 'test/prompt.mjs', 'test/install.mjs', 'test/update.mjs', 'test/client.mjs') |
-            Where-Object { -not (Test-Path $_) }
-          if ($missing.Count -gt 0) {
-            Write-Host "::notice::本次跳过了尚不存在的测试文件：$($missing -join ', ')"
+          $runtime = $env:DSH_RUNTIME_DIR
+          if ([string]::IsNullOrWhiteSpace($runtime)) { $runtime = 'D:/DSHPC/resources/app/dsh' }
+          $runtime = $runtime.Replace('\', '/')
+          $anchor = "${runtime}/node_modules/@deepseek-ai/dsh-system-prompt/lib/index.js"
+          if (Test-Path -LiteralPath $anchor) {
+            "DSH_RUNTIME_DIR=$runtime" >> $env:GITHUB_ENV
+            'found=true' >> $env:GITHUB_OUTPUT
+            Write-Host "DSH runtime: $runtime"
+          } else {
+            'found=false' >> $env:GITHUB_OUTPUT
+            Write-Host "::notice title=smoke-skipped::no DSH runtime at $anchor; test/smoke.mjs is skipped on runners"
           }
 
+      - name: 运行时冒烟测试（test/smoke.mjs）
+        if: steps.runtime.outputs.found == 'true'
+        run: node test/smoke.mjs
+
+      # 放最后：打包契约（manifest、文件清单、CHANGELOG 版本段）最慢也最容易因
+      # 版本号/CHANGELOG 不一致而红，单独一步便于定位。
       - name: 打包契约检查（scripts/check-package.mjs）
         run: node scripts/check-package.mjs

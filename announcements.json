@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-21-sunder-1-2-0",
+    "level": "info",
+    "date": "2026-10-21",
+    "title": {
+      "zh": "Sunder 1.2.0：公告刷新、诊断 CLI 与文档补齐",
+      "en": "Sunder 1.2.0: refresh announcements, a doctor CLI and fuller docs"
+    },
+    "body": {
+      "zh": "sunder_notice 新增 action=refresh，立即重拉公告 feed 并回报 unread / source / feed_error；sunder_status 增加 announce_limit 行，feed_error 反映最近一次真实错误。浏览器横幅条数上限收到 3，与宿主 announceLimit 默认值一致。新增只读诊断 node scripts/doctor.mjs（10 项检查，退出码 0/1/2，--json 可机读，npm run doctor 同义），配套 test/doctor.mjs，CI 增加 doctor 测试并补上 tag 触发的发布工作流与 CodeQL 扫描。文档补 CONTRIBUTING.md、SECURITY.md、docs/PROMPTS.md 与英文 README。装完仍需重启 DSH。",
+      "en": "sunder_notice gains action=refresh, which re-pulls the announcement feed on the spot and reports unread / source / feed_error; sunder_status now prints announce_limit, and its feed_error line shows the most recent real failure. The browser banner caps at 3 entries, matching the host's default announceLimit. New read-only diagnostics: node scripts/doctor.mjs (ten checks, exit 0/1/2, --json for machines, npm run doctor as an alias), with test/doctor.mjs, a doctor step in CI and tag-triggered release plus CodeQL workflows. Docs: CONTRIBUTING.md, SECURITY.md, docs/PROMPTS.md and an English README. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.2.0",
+    "minVersion": "1.2.0"
+  },
+  {
     "id": "2026-10-21-hello-sunder",
     "level": "info",
     "date": "2026-10-21",

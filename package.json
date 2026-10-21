@@ -1,6 +1,6 @@
 {
   "name": "dsh-sunder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Sunder: an open-source DSH bundle that swaps the deployment persona for an unrestricted prompt pack, with presets, release announcements, self-update checks, install scripts and a settings UI.",
   "type": "module",
   "main": "index.js",
@@ -37,11 +37,16 @@
     "icon.svg",
     "announcements.json",
     "CHANGELOG.md",
-    "README.md"
+    "README.md",
+    "README.en.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
   ],
   "scripts": {
-    "test": "node test/unit.mjs && node test/prompt.mjs && node test/client.mjs && node test/install.mjs && node test/update.mjs && node test/smoke.mjs && node scripts/check-package.mjs",
+    "test": "node test/unit.mjs && node test/prompt.mjs && node test/client.mjs && node test/install.mjs && node test/update.mjs && node test/doctor.mjs && node test/smoke.mjs && node scripts/check-package.mjs",
     "test:client": "node test/client.mjs",
+    "test:doctor": "node test/doctor.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "install:profile": "node scripts/install.mjs",
     "uninstall:profile": "node scripts/uninstall.mjs",
     "release": "node scripts/release.mjs",
