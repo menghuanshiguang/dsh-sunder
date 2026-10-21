@@ -89,6 +89,7 @@ node D:\dsh\sunder\test\smoke.mjs
 | `announceLimit` | `3` | maximum unread announcements surfaced per request |
 | `feedUrl` | raw GitHub `announcements.json` | primary announcement feed location |
 | `feedMirrors` | `[]` | extra feed URLs tried before the built-in mirrors |
+| `builtinMirrors` | `true` | keep the built-in GitHub contents API and `ghproxy.net` mirrors in the fallback chain |
 | `bundledAnnouncements` | `true` | fall back to the `announcements.json` shipped in the package when every remote source fails |
 | `updateCheck` | `true` | check GitHub Releases for a newer version |
 | `updateIntervalHours` | `6` | minimum time between automatic checks |

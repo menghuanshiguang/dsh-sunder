@@ -59,6 +59,7 @@ const DEFAULTS = {
   announceLimit: 3,
   feedUrl: DEFAULT_FEED,
   feedMirrors: [],
+  builtinMirrors: true,
   bundledAnnouncements: true,
   updateCheck: true,
   updateIntervalHours: 6,
@@ -320,6 +321,7 @@ export function apply(ctx, rawConfig = {}) {
       const result = await fetchAnnouncements({
         url: config.feedUrl,
         urls: mirrors,
+        builtinMirrors: config.builtinMirrors !== false,
         currentVersion: VERSION,
         limit: config.announceLimit,
         acked: state.ackedAnnouncements,

@@ -94,11 +94,30 @@ if (listed.length === 0) {
     parents: [tipSha],
   });
   await api('PATCH', 'git/refs/heads/main', { sha: commit.sha, force: true });
-  await api('POST', 'git/refs', { ref: `refs/tags/${tag}`, sha: commit.sha });
-  const release = await api('POST', 'releases', {
-    tag_name: tag,
-    name: `dsh-sunder ${tag}`,
-    body: releaseNotes(),
-  });
-  console.log(`publish-api: ${tag} published — ${release.html_url}`);
+
+  // Idempotent tag: move it when it already exists (re-publishing a version).
+  let tagMoved = false;
+  try {
+    await api('POST', 'git/refs', { ref: `refs/tags/${tag}`, sha: commit.sha });
+  } catch (error) {
+    if (!String(error.message).includes('422')) throw error;
+    await api('PATCH', `git/refs/tags/${tag}`, { sha: commit.sha, force: true });
+    tagMoved = true;
+  }
+
+  // Idempotent release: update the notes when the release already exists.
+  let release;
+  try {
+    release = await api('POST', 'releases', {
+      tag_name: tag,
+      name: `dsh-sunder ${tag}`,
+      body: releaseNotes(),
+    });
+  } catch (error) {
+    if (!String(error.message).includes('422')) throw error;
+    const existing = await api('GET', `releases/tags/${tag}`);
+    release = await api('PATCH', `releases/${existing.id}`, { name: `dsh-sunder ${tag}`, body: releaseNotes() });
+    tagMoved = true;
+  }
+  console.log(`publish-api: ${tag} published — ${release.html_url}${tagMoved ? ' (tag moved, release updated)' : ''}`);
 }
