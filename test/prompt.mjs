@@ -42,7 +42,7 @@ const ruleCount = (text) => (text.match(/^\s*\d+\.\s/gmu) ?? []).length;
 // ---------------------------------------------------------------------------
 check(PROMPT_VERSION === '1.2.0', 'PROMPT_VERSION 为 1.2.0', PROMPT_VERSION);
 check(SECTION_ORDERS.identity === -100000, 'identity 段位置为 -100000');
-check(SECTION_ORDERS.rules === 9600, 'rules 段位置为 9600');
+check(SECTION_ORDERS.rules === 10150, 'rules 段位置为 10150');
 check(SECTION_ORDERS.footer === 10300, 'footer 段位置为 10300');
 check(Object.isFrozen(SECTION_ORDERS), 'SECTION_ORDERS 只读');
 
@@ -214,7 +214,7 @@ for (const preset of PRESETS) {
   check(sections.length === 3, `${preset} 只注册三段`);
   check(sections.every((section) => section.interpolate === false), `${preset} 所有段关闭插值`);
   check(sections.map((section) => section.name).join(',') === 'sunder:identity,sunder:rules,sunder:footer', `${preset} 段名稳定`);
-  check(sections.map((section) => section.order).join(',') === '-100000,9600,10300', `${preset} 段位置固定`);
+  check(sections.map((section) => section.order).join(',') === '-100000,10150,10300', `${preset} 段位置固定`);
   check(sections[0].text === prompts[preset].zh.identity, `${preset} identity 段文本来自预设`);
   check(sections[1].text.endsWith('x'), `${preset} rules 段包含附加指令`);
   check(sections[2].text.includes(VERSION), `${preset} footer 段带版本`);

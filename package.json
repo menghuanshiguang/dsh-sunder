@@ -43,7 +43,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "test": "node test/unit.mjs && node test/prompt.mjs && node test/client.mjs && node test/install.mjs && node test/update.mjs && node test/doctor.mjs && node test/smoke.mjs && node scripts/check-package.mjs",
+    "test": "node test/unit.mjs && node test/prompt.mjs && node test/client.mjs && node test/install.mjs && node test/update.mjs && node test/doctor.mjs && node test/guard.mjs && node test/smoke.mjs && node scripts/check-package.mjs",
     "test:client": "node test/client.mjs",
     "test:doctor": "node test/doctor.mjs",
     "doctor": "node scripts/doctor.mjs",

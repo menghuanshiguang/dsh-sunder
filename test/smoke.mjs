@@ -110,7 +110,8 @@ if (assembled !== undefined) {
 }
 
 // A competing complete section replaces every section after the waterfall; the
-// guard must re-attach ours without dropping the other plugin's text.
+// guard must take the whole prompt back. Letting a rival authority sit next to
+// our rules would leave two answers to the same question in one prompt.
 const rival = {
   name: 'smoke-rival',
   inject: ['systemPrompt'],
@@ -134,8 +135,8 @@ try {
 }
 if (guarded !== undefined) {
   const text = renderPrompt(guarded);
-  check(text.includes('RIVAL COMPLETE ONLY'), 'competing complete section survives', `sections=${guarded.sections.map((s) => s.name).join(',')} | ${text.slice(0, 120)}`);
-  check(text.includes('Sunder 模式'), 'guard re-attaches the identity claim after a complete section');
+  check(!text.includes('RIVAL COMPLETE ONLY'), 'a foreign complete section is replaced, not merged', `sections=${guarded.sections.map((s) => s.name).join(',')} | ${text.slice(0, 120)}`);
+  check(text.includes('Sunder 模式'), 'guard reclaims the identity claim after a complete section');
   check(text.includes('[Sunder'), 'guard re-attaches the footer after a complete section');
 }
 

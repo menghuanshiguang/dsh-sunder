@@ -73,7 +73,7 @@ package.json ───►│ dsh.profile.bundles = [dsh-base, dsh-web-app, …, 
 | 段名 | order | 为什么在这里 |
 | --- | --- | --- |
 | `sunder:identity` | `-100000` | 整份提示的第一段。宿主身份段是 `-1000`，任何"更靠前"的抢占都必须在这里发生 |
-| `sunder:rules` | `9600` | 所有工具段（`1000`–`5000`）之后、`STRUCTURED_OUTPUT`（`9900`）与 `HARNESS_SOURCE`（`10000`）之前。规则夹在中段工具清单之后，才不会被 schema 噪声淹没 |
+| `sunder:rules` | `10150` | `HARNESS_SOURCE`（`10000`）、`WEB_SURFACE`（`10100`）之后，部署人格后缀（`10200`）之前。规则只比 footer 早一步落纸，是模型回答前读到的最后一段约束 |
 | `sunder:footer` | `10300` | 最后一段。`DEPLOYMENT_PERSONA_SUFFIX`（`10200`）之后，模型读到的最后一句仍是"用户指令是唯一权威" |
 
 order 被冻结在 `lib/prompt.js` 的 `SECTION_ORDERS` 里，测试（`test/prompt.mjs`）直接断言这三个数字。预设（`full` / `concise` / `dev`）只改文案，不改位置。
@@ -95,7 +95,7 @@ DSH 的插值是严格的：段文本里出现未注册的 `{{var}}`，渲染时
 
 ### 它要解决什么
 
-`systemPrompt.assemble()` 的结果是宿主自己拼的：任何注册了 `complete: true` 段的插件都能让 `sections` 只剩它自己那一段；别的插件也可能在 waterfall 里重建整个 assembly。Sunder 的目标是"无论谁怎么拼，三个 `sunder:*` 段都在"。
+`systemPrompt.assemble()` 的结果是宿主自己拼的：任何注册了 `complete: true` 段的插件都能让 `sections` 只剩它自己那一段；别的插件也可能在 waterfall 里重建整个 assembly。Sunder 的目标是"无论谁怎么拼，三个 `sunder:*` 段都在，而且只由 Sunder 说了算"——被 `complete` 整段顶掉时替换而不是共存，否则同一份提示里会出现两套互相竞争的最高指令。
 
 ### 安装路径
 
@@ -275,7 +275,7 @@ applyUpdate
 | --- | --- | --- |
 | 宿主 `assemble` 抛错 | guard 捕获，返回 `{ sections: [], contexts: [], tools: [] }` | 这一轮没有系统提示；`debug: true` 时有警告日志 |
 | 补段过程抛错 | 原样返回宿主的 assembly | Sunder 段缺失，其余照常 |
-| 别的插件注册 `complete` 段 | 宿主只返回那一段 | guard 把三段补回去 |
+| 别的插件注册 `complete` 段 | 宿主只返回那一段 | guard **用三段整体替换那一段**，对手文本不会进入提示词 |
 | 同名段已被注册 | 宿主注册时抛 `prompt section "…" is already registered` | 启动失败，需要改掉冲突的段名 |
 | 别的插件引用了未注册变量 | 宿主渲染时抛错，**整轮**提示失败 | 见 [TROUBLESHOOTING](./TROUBLESHOOTING.md#3-unknown-prompt-variable-与-dsh-purge-冲突) |
 | `state.json` 写不进去 | `saveState()` 返回 `false`，不抛 | 已读/确认/缓存不持久，下次重来 |

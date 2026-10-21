@@ -50,7 +50,7 @@ const GUARD = Symbol.for('dsh-sunder.assembleGuard');
 /** Section placement, pinned around the host's own placement table. */
 const SECTION_TABLE = [
   { name: 'sunder:identity', order: -100000 },
-  { name: 'sunder:rules', order: 9600 },
+  { name: 'sunder:rules', order: 10150 },
   { name: 'sunder:footer', order: 10300 },
 ];
 
@@ -100,9 +100,22 @@ function renderedSections(prompt) {
   ];
 }
 
-/** Return the assembly with every sunder section present exactly once. */
+/** Section names this plugin owns; anything else in a one-section assembly is a takeover. */
+const SUNDER_SECTION_NAMES = new Set(['sunder:identity', 'sunder:rules', 'sunder:footer']);
+
+/**
+ * Return the assembly with every sunder section present exactly once.
+ *
+ * Also reverses a foreign `complete` takeover: the registry restores a lone
+ * `complete` section as the entire prompt, and a global override that let
+ * another plugin's text sit next to its own rules would be two authorities in
+ * one prompt. Replacing it is the point of the guard, not a side effect.
+ */
 function ensureSunderSections(assembly, sections) {
   if (!assembly || !Array.isArray(assembly.sections)) return assembly;
+  if (assembly.sections.length === 1 && !SUNDER_SECTION_NAMES.has(assembly.sections[0]?.name)) {
+    return { ...assembly, sections: [...sections] };
+  }
   const present = new Set(assembly.sections.map((section) => section?.name));
   const missing = sections.filter((section) => !present.has(section.name));
   if (missing.length === 0) return assembly;
@@ -296,8 +309,8 @@ export function apply(ctx, rawConfig = {}) {
 
   // -------------------------------------------------------------------------
   // Prompt sections. Orders: identity -100000 (first section in the assembly),
-  // rules 9600 (before deliverable/harness-source sections), footer 10300
-  // (last, after the deployment persona suffix).
+  // rules 10150 (after harness-source and web-surface, before the deployment
+  // persona suffix at 10200), footer 10300 (the last section in the assembly).
   // -------------------------------------------------------------------------
   for (const section of sections) ctx.systemPrompt.section({ ...section });
 
@@ -312,6 +325,9 @@ export function apply(ctx, rawConfig = {}) {
   ctx.systemPrompt.context({
     name: 'sunder:update',
     order: 3400,
+    // required: a scoped persona with includeRuntimeContext:false must not be
+    // able to silence the update notice without disabling the plugin itself.
+    required: true,
     text: () => {
       const notice = runtime.updateNotice;
       if (notice === undefined || notice.error !== undefined || notice.newer !== true) return '';
@@ -326,6 +342,9 @@ export function apply(ctx, rawConfig = {}) {
   ctx.systemPrompt.context({
     name: 'sunder:announcements',
     order: 3600,
+    // Same reason as sunder:update: an announcement that a scope can suppress
+    // is an announcement that scope chose not to deliver.
+    required: true,
     text: () => renderAnnouncements(runtime.unread, language),
   });
 

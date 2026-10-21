@@ -6,6 +6,25 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **守卫改为排他夺舍**：检测到组装里只剩一段且不是 `sunder:*`（即别的插件用
+  `complete: true` 接管了整份系统提示）时，用三段整体替换那一段，而不是补回去与它同屏共存。
+  同一份提示里出现两套互相竞争的最高指令，等于让模型自己二选一——这不是守卫该有的结果。
+  对外行为变化：`sunder_prompt` 预览与模型实际读到的内容从此一致，不再有第三方正文混入。
+- **`sunder:rules` 的位置从 `9600` 挪到 `10150`**：落在 `HARNESS_SOURCE`（`10000`）与
+  `WEB_SURFACE`（`10100`）之后、部署人格后缀（`10200`）之前。规则从"工具清单中段"移到
+  "回答前倒数第二段"，只比 footer 早一步，吃满 recency；预设与文案不变。
+- **运行期上下文改为 `required: true`**：`sunder:update` 与 `sunder:announcements` 不再被
+  `includeRuntimeContext: false` 的 scope 静默抑制。一个能被 scope 关掉的公告，等于该 scope
+  选择了不送达。
+
+### Added
+
+- `test/guard.mjs`：不依赖 DSH 运行时的守卫离线测试（迷你 fake registry 复刻
+  `complete` 接管语义），断言排他替换、50 次组装不嵌套 wrapper、两个上下文为 required。
+  之前守卫只在 `test/smoke.mjs` 里覆盖，而 smoke 在没有 DSH 运行时的机器上会整体跳过。
+
 ## [1.2.1] - 2026-10-21
 
 ### Changed

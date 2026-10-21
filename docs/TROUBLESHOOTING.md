@@ -89,7 +89,7 @@ prompt section "sunder:identity" is already registered
 **确认**：
 
 - 看报错里的变量名，用 `dsh-purge`、`dsh-sunder` 之一去仓库里搜它的注册点；错误里列出的 `registered: …` 就是当前真正注册过的变量名；
-- 会话里跑 `sunder_status`：`placements=` 一栏应当有 `sunder:identity@-100000,sunder:rules@9600,sunder:footer@10300`。缺哪段，就说明它没进组装。
+- 会话里跑 `sunder_status`：`placements=` 一栏应当有 `sunder:identity@-100000,sunder:rules@10150,sunder:footer@10300`。缺哪段，就说明它没进组装。
 
 **修**：
 

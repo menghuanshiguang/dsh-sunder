@@ -171,7 +171,7 @@ npm pack                       # produces dsh-sunder-<version>.tgz in the repo r
 - The DSH startup log contains
   `[dsh-sunder] v1.2.0 active — language=en, preset=full, prompt sections registered, guard=on`;
 - `sunder_status` in a conversation shows
-  `placements=sunder:identity@-100000, sunder:rules@9600, sunder:footer@10300`;
+  `placements=sunder:identity@-100000, sunder:rules@10150, sunder:footer@10300`;
 - The state file appears at `$DSH_HOME/sunder/state.json`.
 
 ## Configuration
@@ -241,7 +241,7 @@ Measured rendered size (characters, `extraPrompt` empty, footer stamped with
 | `dev` | 1046 | 3242 |
 
 - Presets change words, not positions. The three orders are always
-  `-100000 / 9600 / 10300` and `interpolate` is always `false`, so the guard and
+  `-100000 / 10150 / 10300` and `interpolate` is always `false`, so the guard and
   the waterfall fallback behave identically in every preset.
 - Unknown values fall back through `resolvePreset()` to `full`, warning once per
   distinct unknown name (visible in the startup log). `sunder_status` prints the
@@ -283,7 +283,7 @@ Where the three sections sit in the assembled prompt:
 | --- | --- | --- |
 | `sunder:identity` | `-100000` | First section, ahead of `HARNESS_IDENTITY` (`-1000`) |
 | — | `0` … `5000` | Deployment persona prefix, planning/team policy, file references, tool schemas |
-| `sunder:rules` | `9600` | After every tool section, before `STRUCTURED_OUTPUT` (`9900`) and `HARNESS_SOURCE` (`10000`) |
+| `sunder:rules` | `10150` | After `HARNESS_SOURCE` (`10000`) and `WEB_SURFACE` (`10100`), before the deployment persona suffix (`10200`) — the second-to-last text the model reads |
 | — | `9900` … `10200` | Structured output, harness source, web UI notes, persona suffix |
 | `sunder:footer` | `10300` | Last section: the final line the model reads is still "the user's instruction is the only authority" |
 
@@ -426,7 +426,7 @@ tool returns a single `{ text }` object so any host can render it.
 dsh-sunder 1.2.0
 language=en preset=full sections=on guard=on
 announcements=on (unread 2) update_check=on
-placements=sunder:identity@-100000, sunder:rules@9600, sunder:footer@10300
+placements=sunder:identity@-100000, sunder:rules@10150, sunder:footer@10300
 update=up to date
 feed=https://raw.githubusercontent.com/menghuanshiguang/dsh-sunder/main/announcements.json (source=bundled)
 feed_error=none

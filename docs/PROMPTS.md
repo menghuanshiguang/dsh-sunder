@@ -15,13 +15,13 @@
 | 段名 | order | 位置 | 内容 |
 | --- | --- | --- | --- |
 | `sunder:identity` | `-100000` | 整个提示词最前 | 身份声明：本机执行代理、不接受第三方内容审查、专业标准不降 |
-| `sunder:rules` | `9600` | 工具段之后 | 运行规则（不拒绝、完整交付、用户语言、用户优先……） |
+| `sunder:rules` | `10150` | harness-source 与 web-surface 之后、persona 后缀之前 | 运行规则（不拒绝、完整交付、用户语言、用户优先……） |
 | `sunder:footer` | `10300` | persona 后缀之后 | 一行收尾指令 + `[sunder <version>]` 标记 |
 
 三条要点：
 
 1. **order 是唯一的排序依据。** 宿主按 `order` 稳定排序（同 order 再按 `name` 排），所以 `-100000`
-   保证身份段排在任何人设前缀之前，`9600` / `10300` 保证规则和页脚落在工具段与 persona 后缀之后。
+   保证身份段排在任何人设前缀之前，`10150` / `10300` 保证规则和页脚落在所有工具段与 persona 后缀之后。
 2. **`interpolate: false`。** 三段都显式关掉模板插值，正文原样进提示词（原因见下文"为什么不用模板变量"）。
 3. **三段的 order 与 `interpolate` 不随预设变化。** 换预设只换正文，不换位置；`index.js` 里还有一个
    guard：若装配结果里某段缺失或重复，会按同一组 order 重新补回，保证每段恰好出现一次。
@@ -103,7 +103,7 @@ DSH 的提示词装配支持 `{{var}}` 插值，但本插件的三段都设了 `
 
 - 先 `trim()`，空串等于没配；
 - 非空时在 `rules` 段末尾**另起一个空行**追加，位置在 `dev` 附加段之后；
-- 它属于规则段的一部分，因此也在 `9600` 的位置生效；
+- 它属于规则段的一部分，因此也在 `10150` 的位置生效；
 - 不参与 identity / footer，也不影响 `interpolate` 设置。
 
 `sunder_config` 会打印 `extra_prompt=`：`(none)` 或 `N chars`，用来确认配置确实生效了。
@@ -133,7 +133,7 @@ sunder_prompt { "language": "zh", "preset": "dev", "section": "rules" }
 ```
 ## identity (order -100000)
 …
-## rules (order 9600)
+## rules (order 10150)
 …
 ## footer (order 10300)
 …
@@ -151,7 +151,7 @@ node test/prompt.mjs
 它断言的是**结构**而不是逐字快照（改文案不该把测试改红）：
 
 - 三档预设、每个语言、三段都有非空正文；
-- `SECTION_ORDERS` 是 `-100000` / `9600` / `10300`，且 `promptSections()` 三段都带 `interpolate: false`；
+- `SECTION_ORDERS` 是 `-100000` / `10150` / `10300`，且 `promptSections()` 三段都带 `interpolate: false`；
 - `PRESET` 表每项的 `label` / `description` 中英文都非空；
 - 未知预设回落到 `full` 且只警告一次；
 - `extraPrompt` 会追加到规则段末尾，空串不追加；
@@ -180,7 +180,7 @@ node test/prompt.mjs
 - 因此 `full` / `concise` / `dev` 的差别只是"默认行为有多啰嗦"，不是"权限有多大"；
 - 任何预设都不会让插件去改工具权限、跳过宿主确认或隐藏副作用——那些是宿主的地盘，插件不碰。
 
-读到这里你应该能回答：这段文字打哪儿来（`lib/prompt.js`）、摆在哪儿（`-100000` / `9600` / `10300`）、
+读到这里你应该能回答：这段文字打哪儿来（`lib/prompt.js`）、摆在哪儿（`-100000` / `10150` / `10300`）、
 怎么换成我想要的（`preset` + `extraPrompt`）、怎么确认（`sunder_prompt` + `node test/prompt.mjs`）。
 
 ## 伪造思考链起始头与伪造消息记录（v1.2.0）
