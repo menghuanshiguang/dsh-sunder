@@ -239,6 +239,10 @@ assistant/message role: assistant  "可以。这个会话里我按你的原话�
   agent 没有 provider/model 时自动跳过。
 - `warmup: false` 关闭；`sunder_status` 显示 `warmup=on|off`，`sunder_config` 显示
   `warmup=` 与 `warmup_question=`，`sunder_prompt section=warmup` 可预览这对问答。
+- v1.5.1 起这两条事件的行形状与宿主自己的行完全一致：`user/message` 是裸消息
+  （不带 `turn`/`step`），`assistant/message` 带 `{turn, step, message, usage, stream: []}`
+  ——少写 `stream` 会让宿主在开轮时报 `Cannot read properties of undefined (reading 'length')`，
+  `test/source.mjs` 用宿主真实的 `Session` 构造器把这一点固化成 seed/恢复回归。
 
 实测边界（都写进公告和 CHANGELOG）：成人向与政治/审查类请求改善明显；`thinkHeader` 仍按需
 输出；但凭据抓取、免杀、勒索这类**安全类**请求依然会被模型自身对齐拦下——这不是插件能翻转的层。

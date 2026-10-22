@@ -173,6 +173,10 @@ try {
   );
   check(appended.every((entry) => entry.options?.surfaceOp === 'append'), 'warmup events are appended to the surface');
   check(appended.every((entry) => entry.data?.source?.warmup === true || entry.data?.message?.source?.warmup === true), 'warmup events are tagged for dedupe');
+  check(appended[0]?.data?.turn === undefined && appended[0]?.data?.step === undefined, 'warmup question keeps the bare user/message data shape');
+  check(Array.isArray(appended[1]?.data?.stream) && appended[1].data.stream.length === 0, 'warmup commitment carries the settlement stream array');
+  check(appended[1]?.data?.usage !== undefined && typeof appended[1].data.usage.totalTokens === 'number', 'warmup commitment carries settlement usage');
+  check(appended[1]?.data?.turn === 1 && appended[1]?.data?.step === 1, 'warmup commitment is stamped with the open turn/step');
 
   await preStep({ agent: warmAgent, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
   check(appended.length === 2, 'warmup is written once per session', String(appended.length));

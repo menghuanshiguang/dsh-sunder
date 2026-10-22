@@ -6,6 +6,22 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-22
+
+### Fixed
+
+- **1.5.0 起每个新会话第一轮崩溃 `Cannot read properties of undefined (reading 'length')`**：
+  warm-up 的 `assistant/message` 行缺少宿主的 settlement 字段（`usage` 与 `stream`）。
+  `Session.append()` 对 append 路径的校验较松，事件能落盘；但开轮时宿主读取该行的
+  `stream`（恢复校验也要求 `Array.isArray(data.stream)`），于是整个 turn 在写入
+  `step/start` 之前就抛错。现在事件形状与宿主自己的行完全一致：
+  `user/message` 为裸消息（不带 `turn`/`step`），`assistant/message` 带
+  `{turn, step, message, usage, stream: []}`。
+- `test/source.mjs` 新增回归：用宿主真实的 `Session` 构造器做 seed/恢复校验，断言
+  合法的 warm-up 两行可以恢复，而缺少 `stream` 的旧形状必然抛
+  `seed assistant/message at index N has invalid settlement fields`（把本次崩溃
+  固化成测试，防止再次回归）。`test/guard.mjs` 同步断言两条事件的行形状。
+
 ## [1.5.0] - 2026-10-22
 
 ### Added

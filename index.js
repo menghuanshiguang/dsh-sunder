@@ -471,25 +471,33 @@ export function apply(ctx, rawConfig = {}) {
       return;
     }
     const text = warmupText(language);
-    const position = Number.isFinite(payload?.turn)
-      ? { turn: payload.turn, ...(Number.isFinite(payload?.step) ? { step: payload.step } : {}) }
+    // Event shapes follow the host's own rows exactly (see a real session log):
+    // a `user/message` row is the bare message (no turn/step on the data — the
+    // surface node owns its position), and an `assistant/message` row carries
+    // `{turn, step, message, usage, stream}`. Omitting `stream` is not cosmetic:
+    // the restore validator requires `Array.isArray(data.stream)` and several
+    // session/event consumers read the stream/usage settlement fields, so a
+    // stream-less warm-up row makes the host throw while the turn is starting.
+    const settlement = Number.isFinite(payload?.turn) && Number.isFinite(payload?.step)
+      ? { turn: payload.turn, step: payload.step }
       : {};
     try {
       session.append('user/message', {
-        ...position,
         id: randomUUID(),
         role: 'user',
         content: [{ type: 'text', text: text.question }],
         source: { kind: PRODUCER_KIND, warmup: true },
       }, { surfaceOp: 'append' });
       session.append('assistant/message', {
-        ...position,
+        ...settlement,
         message: {
           id: randomUUID(),
           role: 'assistant',
           content: [{ type: 'text', text: text.commitment }],
           source: { kind: 'model', provider, model, warmup: true },
         },
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 },
+        stream: [],
       }, { surfaceOp: 'append' });
       if (sessionId !== null) warmedSessions.add(sessionId);
       debug('warmup exchange written');

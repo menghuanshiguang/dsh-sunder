@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-5-1",
+    "level": "warn",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.5.1：修好新会话第一轮崩溃（reading 'length'）",
+      "en": "Sunder 1.5.1: fix the first-turn crash in new sessions (reading 'length')"
+    },
+    "body": {
+      "zh": "1.5.0 的会话热身写入的 assistant 消息缺少宿主要求的 settlement 字段（usage、stream），开轮时宿主读 stream 抛 Cannot read properties of undefined (reading 'length')，新会话第一轮必崩。1.5.1 让两条热身事件的行形状与宿主自己的行完全一致（user 行不带 turn/step，assistant 行带 turn/step/message/usage/stream: []），并用宿主真实的 Session 构造器做 seed/恢复回归。装完重启 DSH；1.5.0 期间新开的失败会话若打不开，删除该 session 目录即可。",
+      "en": "The warm-up assistant row written by 1.5.0 lacked the host settlement fields (usage, stream), so the host threw Cannot read properties of undefined (reading 'length') when the first turn of a new session started. 1.5.1 matches the host row shape exactly (bare user message; assistant row with turn/step/message/usage/stream: []) and adds a seed/restore regression using the host's real Session constructor. Restart DSH after installing; a failed session created while 1.5.0 was installed can simply be deleted if it will not open."
+    },
+    "link": "https://github.com/menhuanshiguang/dsh-sunder/releases/tag/v1.5.1",
+    "minVersion": "1.5.1"
+  },
+  {
     "id": "2026-10-22-sunder-1-5-0",
     "level": "info",
     "date": "2026-10-22",
