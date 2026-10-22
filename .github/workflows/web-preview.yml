@@ -26,11 +26,14 @@ jobs:
   preview:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      DSH_HOME: ${{ runner.temp }}/dsh-home
-      PORT: '8080'
     steps:
       - uses: actions/checkout@v4
+
+      - name: 环境
+        run: |
+          echo "DSH_HOME=$RUNNER_TEMP/dsh-home" >> "$GITHUB_ENV"
+          echo "PORT=8080" >> "$GITHUB_ENV"
+
 
       - uses: actions/setup-node@v4
         with:
