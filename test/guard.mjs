@@ -60,13 +60,17 @@ function createCtx() {
   const listeners = new Map();
   const ctx = {
     systemPrompt: prompt,
+    // cordis hands each service to a nested inject callback; mirror that shape
+    // so the plugin can declare `tools` / `webServer` without reading them off
+    // this fake context directly (`ctx.tools` is what throws in a real host).
+    inject(names, callback) {
+      if (!Array.isArray(names) || typeof callback !== 'function') return;
+      if (names.includes('tools')) callback({ tools: { register: () => () => {} } });
+      else if (names.includes('webServer')) callback({ webServer: undefined });
+    },
     on(name, handler) {
       listeners.set(name, handler);
       return () => {};
-    },
-    /** Cordis reads an undeclared service through `get`, which returns undefined. */
-    get() {
-      return undefined;
     },
     effect(run) {
       if (typeof run === 'function') run();

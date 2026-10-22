@@ -655,7 +655,7 @@ export function apply(ctx, rawConfig = {}) {
       thinkHeader: prompt.thinkHeader === null ? false : prompt.thinkHeader,
       fakeHistory: prompt.fakeHistory === null ? false : prompt.fakeHistory,
       guard: config.guard !== false,
-      tools: config.tools !== false && Boolean(ctx.get('tools')),
+      tools: config.tools !== false && toolCount > 0,
       announceLimit: Math.max(0, Number(config.announceLimit) || 3),
       unread: unread.length,
       announcements: runtime.unread.map((item) => ({
@@ -712,12 +712,18 @@ export function apply(ctx, rawConfig = {}) {
   debug('host bridge registered:', bridge.registered);
 
   // -------------------------------------------------------------------------
-  // Tools. Optional: headless profiles can run without the tools service, and a
-  // required `tools` in `inject` would keep the whole plugin from activating
-  // there. `ctx.get()` reads the service without claiming the dependency.
+  // Tools. Optional: headless profiles can run without the tools service, and
+  // cordis forbids reading `ctx.tools` unless the service is declared in the
+  // plugin's `inject`. The dependency is declared here (nested), so the plugin
+  // still activates — prompt sections + host bridge — when no tools exist.
   // -------------------------------------------------------------------------
-  const tools = ctx.get('tools');
-  if (config.tools !== false && tools) {
+  let toolCount = 0;
+  if (config.tools !== false) ctx.inject(['tools'], (toolsCtx) => {
+    const tools = toolsCtx.tools;
+    const register = (definition) => {
+      tools.register(definition);
+      toolCount += 1;
+    };
     const output = {
       schema: {
         type: 'object',
@@ -727,7 +733,7 @@ export function apply(ctx, rawConfig = {}) {
       render: (_args, value) => [{ type: 'text', text: String(value?.text ?? '') }],
     };
 
-    tools.register({
+    register({
       name: 'sunder_status',
       description: 'Show dsh-sunder status: version, language, pinned prompt sections, unread announcements, update-check cache, state file path.',
       parameters: { type: 'object', additionalProperties: false, properties: {} },
@@ -754,7 +760,7 @@ export function apply(ctx, rawConfig = {}) {
       },
     });
 
-    tools.register({
+    register({
       name: 'sunder_notice',
       description: 'List, acknowledge, or refresh dsh-sunder announcements from the remote feed. Actions: list (default) | ack id | ack-all | refresh. refresh re-fetches the feed immediately instead of reusing the cached runtime state.',
       parameters: {
@@ -795,7 +801,7 @@ export function apply(ctx, rawConfig = {}) {
       },
     });
 
-    tools.register({
+    register({
       name: 'sunder_update',
       description: 'Check for or apply a dsh-sunder release. action=check (default) forces a GitHub release check (ignoring the cache) and reports the latest version, release URL, and whether an upgrade is available. action=apply downloads the newest release, validates the package name, replaces the files in this install, and reports applied/from/to/backup — restart DSH afterwards.',
       parameters: {
@@ -882,7 +888,7 @@ export function apply(ctx, rawConfig = {}) {
         return { text: renderApplyReport({ result, language, installed: VERSION, target, backup }).text };
       },
     });
-    tools.register({
+    register({
       name: 'sunder_config',
       description: 'Show the effective dsh-sunder configuration (language, preset, feature switches, feed sources, repo) and where the state file lives.',
       parameters: { type: 'object', additionalProperties: false, properties: {} },
@@ -911,7 +917,7 @@ export function apply(ctx, rawConfig = {}) {
       },
     });
 
-    tools.register({
+    register({
       name: 'sunder_prompt',
       description: 'Preview the exact prompt sections dsh-sunder registers (identity, rules, footer) plus the per-turn rule card serialized into the message list, optionally for another language or preset. Useful for debugging what the model sees.',
       parameters: {
@@ -952,7 +958,7 @@ export function apply(ctx, rawConfig = {}) {
         };
       },
     });
-  }
+  });
 
   console.info(`[dsh-sunder] v${VERSION} active — language=${language}, preset=${config.preset}, think_header=${prompt.thinkHeader === null ? 'off' : 'on'}, fake_history=${prompt.fakeHistory === null ? 'off' : 'on'}, prompt sections registered, guard=${config.guard === false ? 'off' : 'on'}`);
 }

@@ -6,6 +6,19 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-22
+
+### Fixed
+
+- **真实 host 上 `挂载=failed`、设置面板退回"未连上 host 桥"**：1.4.0 在 `apply()` 里直接读
+  `ctx.tools`，但 `tools` 没有写进插件的 `inject`，cordis 在真实 host 上抛
+  `cannot get property "tools" without inject`，整个插件 fiber 失败——提示词 section 已经注册
+  （所以提示词照常生效），但 `sunder_update` 之后的 host 桥注册没跑到，`/sunder/api/*` 从未注册，
+  面板只能回退到静态信息。1.4.1 把五个工具的注册改到嵌套的 `ctx.inject(['tools'], …)` 里：
+  有 tools 服务时注册，没有时插件仍正常激活（提示词 + host 桥）。`sunder_status` 的 `tools=`
+  字段改为按实际注册数判断。新增 `test/guard.mjs` 的 fake ctx 补上 `inject`，与真实 cordis 的
+  服务获取方式一致。
+
 ## [1.4.0] - 2026-10-22
 
 ### Changed

@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-4-1",
+    "level": "warn",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.4.1：修复真实 host 上插件挂载失败、设置面板桥不通",
+      "en": "Sunder 1.4.1: fixes the host-side mount failure that kept the settings panel off the bridge"
+    },
+    "body": {
+      "zh": "1.4.0 在真实 host 上会挂载失败（插件状态显示“挂载=failed”、设置面板退回“未连上 host 桥 / 全部未知”）：apply() 里直接读 ctx.tools，但 tools 没写进 inject，cordis 抛 cannot get property \"tools\" without inject，插件 fiber 失败，host 桥注册没跑到。提示词 section 在失败前已注册，所以正文照常无审查；坏的是设置面板与 sunder_* 工具。1.4.1 把工具注册改成嵌套 ctx.inject(['tools'])，有 tools 就注册、没有也照常激活。装完重启 DSH。",
+      "en": "1.4.0 failed to mount on a real host (plugin state showed mounted=failed, and the settings panel fell back to “no host bridge / unknown”): apply() read ctx.tools directly without declaring tools in inject, so cordis threw 'cannot get property \"tools\" without inject', the plugin fiber failed, and the host bridge registration never ran. The prompt sections had already been registered, so the unrestricted prompt still worked; only the settings panel and the sunder_* tools were broken. 1.4.1 registers the tools inside a nested ctx.inject(['tools']), so they appear when the service exists and the plugin still activates without it. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.4.1",
+    "minVersion": "1.4.1"
+  },
+  {
     "id": "2026-10-22-sunder-1-3-1",
     "level": "info",
     "date": "2026-10-22",
