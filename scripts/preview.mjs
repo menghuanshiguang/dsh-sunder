@@ -121,6 +121,23 @@ try {
     const detail = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
     console.log(`detail_text=${detail.slice(0, 1500)}`);
   }
+  // 设置页：settings.open 绑的快捷键，Web 上是 Control+,（Mac 为 Meta+,）。
+  await page.keyboard.press('Control+Comma');
+  await page.waitForTimeout(1500);
+  if (await page.getByText('Settings', { exact: false }).count() === 0) {
+    await page.keyboard.press('Meta+Comma');
+    await page.waitForTimeout(1200);
+  }
+  await dismiss();
+  await capture('settings');
+  const settingsText = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
+  console.log(`settings_text=${settingsText.slice(0, 1600)}`);
+
+  await clickIf('Plugins');
+  await page.waitForTimeout(800);
+  await clickIf('More');
+  await capture('sidebar-more');
+
   console.log(`title=${await page.title()}`);
 } catch (error) {
   console.error(`preview failed: ${error.message}`);
