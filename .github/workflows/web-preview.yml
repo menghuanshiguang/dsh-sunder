@@ -1,0 +1,93 @@
+name: web-preview
+
+# 手工触发：在 runner 上装一个真实的 DSH Web profile，挂上本仓库的插件，
+# 启动 `dsh web`，用 Chromium 截一张设置页的图当 artifact。
+#
+# 只读：不写仓库、不建 release，唯一的产物是 artifact。
+
+on:
+  workflow_dispatch:
+    inputs:
+      dsh_version:
+        description: '安装的 @deepseek-ai/dsh 版本'
+        required: false
+        default: '0.2.1-rc.2'
+        type: string
+      wait_ms:
+        description: '页面加载后等待多久再截图（毫秒）'
+        required: false
+        default: '15000'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DSH_HOME: ${{ runner.temp }}/dsh-home
+      PORT: '8080'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装 dsh 与 playwright
+        run: |
+          set -euo pipefail
+          npm install -g "@deepseek-ai/dsh@${{ inputs.dsh_version }}"
+          dsh --version
+          mkdir -p "$RUNNER_TEMP/pw"
+          cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null
+          npm install playwright@1.47.2
+          npx playwright install --with-deps chromium
+
+      - name: 初始化 web profile
+        run: |
+          set -euo pipefail
+          mkdir -p "$DSH_HOME"
+          # 首次启动会把 profile 从模板铺到 $DSH_HOME/profiles/web。
+          timeout 90 dsh web --port "$PORT" > "$RUNNER_TEMP/init.log" 2>&1 || true
+          tail -40 "$RUNNER_TEMP/init.log" || true
+          ls -la "$DSH_HOME/profiles" || true
+
+      - name: 挂载插件
+        run: |
+          set -euo pipefail
+          node scripts/install.mjs -p "$DSH_HOME/profiles/web"
+          node scripts/doctor.mjs --profile "$DSH_HOME/profiles/web" --no-network --json | head -60
+
+      - name: 启动并截图
+        run: |
+          set -euo pipefail
+          dsh web --port "$PORT" > "$RUNNER_TEMP/web.log" 2>&1 &
+          echo "pid=$!"
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:$PORT" >/dev/null 2>&1; then
+              echo "up after ${i}s"; break
+            fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:$PORT" | head -c 400 || true
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node scripts/preview.mjs \
+            "http://127.0.0.1:$PORT" "$RUNNER_TEMP/shot.png" --wait "${{ inputs.wait_ms }}"
+
+      - name: 收集日志
+        if: always()
+        run: |
+          cp "$RUNNER_TEMP/web.log" "$RUNNER_TEMP/shot.png" "$GITHUB_WORKSPACE/" 2>/dev/null || true
+          tail -80 "$RUNNER_TEMP/web.log" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-preview
+          path: |
+            shot.png
+            web.log
+          if-no-files-found: warn
