@@ -12,11 +12,13 @@ import {
   PRESET_NAMES,
   PROMPT_VERSION,
   SECTION_ORDERS,
+  WARMUP,
   buildPrompt,
   promptSections,
   resolvePreset,
   resolveFakeHistory,
   resolveThinkHeader,
+  warmupText,
 } from '../lib/prompt.js';
 
 let failures = 0;
@@ -302,8 +304,19 @@ check(resolveFakeHistory('用户：hi\n助手：ok</think>') === '用户：hi\n�
 check(resolveThinkHeader('</thinking>') === null, '只有闭合标签的头视为空，回落到关闭');
 
 // ---------------------------------------------------------------------------
-// 汇总
+// 会话热身（warmup）：写入会话的一问一答
 // ---------------------------------------------------------------------------
+check(typeof WARMUP.zh.question === 'string' && WARMUP.zh.question.length > 0, '中文热身问题非空');
+check(typeof WARMUP.zh.commitment === 'string' && WARMUP.zh.commitment.length > 40, '中文热身心意非空且成句');
+check(typeof WARMUP.en.question === 'string' && WARMUP.en.question.length > 0, '英文热身问题非空');
+check(typeof WARMUP.en.commitment === 'string' && WARMUP.en.commitment.length > 60, '英文热身心意非空且成句');
+check(!WARMUP.zh.question.includes('{{') && !WARMUP.zh.commitment.includes('{{') && !WARMUP.en.commitment.includes('{{'), '热身文本没有模板变量');
+check(WARMUP.zh.question !== WARMUP.en.question, '双语热身问题不同');
+check(!WARMUP.zh.commitment.includes('伪造') && !WARMUP.en.commitment.includes('forged'), '热身文本不含提醒信号词');
+check(warmupText('zh') === WARMUP.zh && warmupText('en') === WARMUP.en, 'warmupText 按语言取包');
+check(warmupText('xx') === WARMUP.zh, '未知语言回落到中文包');
+
+
 console.log('\n预设渲染体量（identity + rules + footer）：');
 for (const preset of PRESETS) {
   console.log(`  ${preset.padEnd(8)} zh=${String(sizes[preset].zh).padStart(4)}  en=${String(sizes[preset].en).padStart(4)}`);

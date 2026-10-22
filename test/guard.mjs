@@ -146,6 +146,46 @@ try {
   const secondTurn = await preStep({ agent: { id: 'a1' }, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
   check(secondTurn.messages.length === 2, 'the next turn gets its own card');
 
+  // Warm-up exchange: written once per session as two real events (a user
+  // question and a model-source assistant commitment), before the request.
+  const appended = [];
+  const session = {
+    id: 'warm-session',
+    append(type, data, options) {
+      appended.push({ type, data, options });
+      return { type, seq: appended.length - 1 };
+    },
+    deriveMessages() {
+      return appended.map((entry) => (entry.type === 'assistant/message' ? entry.data.message : { ...entry.data, role: 'user' }));
+    },
+  };
+  const warmAgent = { id: 'warm-1', options: { provider: 'deepseek-account', model: 'deepseek-flash' }, session };
+  await preStep({ agent: warmAgent, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  check(appended.length === 2, 'warmup writes two events', String(appended.length));
+  check(appended[0]?.type === 'user/message' && appended[0]?.data?.role === 'user', 'warmup question is a real user message', JSON.stringify(appended[0]?.type));
+  check(appended[1]?.type === 'assistant/message' && appended[1]?.data?.message?.role === 'assistant', 'warmup commitment is a real assistant message');
+  check(
+    appended[1]?.data?.message?.source?.kind === 'model'
+      && appended[1]?.data?.message?.source?.provider === 'deepseek-account'
+      && appended[1]?.data?.message?.source?.model === 'deepseek-flash',
+    'warmup commitment carries the host provider/model source',
+    JSON.stringify(appended[1]?.data?.message?.source),
+  );
+  check(appended.every((entry) => entry.options?.surfaceOp === 'append'), 'warmup events are appended to the surface');
+  check(appended.every((entry) => entry.data?.source?.warmup === true || entry.data?.message?.source?.warmup === true), 'warmup events are tagged for dedupe');
+
+  await preStep({ agent: warmAgent, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  check(appended.length === 2, 'warmup is written once per session', String(appended.length));
+
+  const noModel = { id: 'warm-2', options: {}, session: { id: 'warm-session-2', append: () => { throw new Error('should not append'); }, deriveMessages: () => [] } };
+  let noModelError;
+  try {
+    await preStep({ agent: noModel, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
+  } catch (error) {
+    noModelError = error;
+  }
+  check(noModelError === undefined, 'warmup is skipped when the agent has no provider/model', String(noModelError));
+
   const toolStep = await preStep({ agent: { id: 'a1' }, turn: 3, step: 2, messages: claimed, signal: { aborted: false } }, async () => enter);
   check(toolStep.messages.length === 1, 'tool rounds inherit the card instead of restating it');
 
