@@ -69,24 +69,44 @@ const clickIf = async (name) => {
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(wait);
+
+  // 关掉两层弹窗：Preview Notice 与 Get started。两者都吃 Escape。
+  for (let index = 0; index < 3; index += 1) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+  }
   await capture('landing');
-  await labels('landing');
 
-  if (await clickIf('Continue')) {
-    await capture('notice-dismissed');
-    await labels('after-continue');
+  await clickIf('Plugins');
+  await page.waitForTimeout(1500);
+  for (let index = 0; index < 3; index += 1) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
   }
+  await capture('plugins');
 
-  if (await clickIf('Plugins')) {
-    await capture('plugins');
-    await labels('plugins');
+  // 滚到 Sunder 那一行，单独截它，再点开详情。
+  const row = page.getByText('Sunder (unrestricted prompt pack)', { exact: false }).first();
+  const found = await row.count();
+  console.log(`sunder_row=${found}`);
+  if (found > 0) {
+    await row.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(600);
+    const box = await row.boundingBox();
+    if (box !== null) {
+      await page.screenshot({
+        path: `${outDir}/0${shot + 1}-sunder-row.png`,
+        clip: { x: 0, y: Math.max(0, box.y - 90), width: 1440, height: 240 },
+      });
+      shot += 1;
+      console.log(`shot=${outDir}/0${shot}-sunder-row.png`);
+    }
+    await row.click({ force: true }).catch(() => {});
+    await page.waitForTimeout(2000);
+    await capture('sunder-detail');
+    const detail = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
+    console.log(`detail_text=${detail.slice(0, 1200)}`);
   }
-
-  if (await clickIf('More')) {
-    await capture('more');
-    await labels('more');
-  }
-
   console.log(`title=${await page.title()}`);
 } catch (error) {
   console.error(`preview failed: ${error.message}`);
