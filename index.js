@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements, selectAnnouncements } from './lib/announcements.js';
 import { registerSunderBridge } from './lib/bridge.js';
-import { buildPrompt, ruleCard, warmupText } from './lib/prompt.js';
+import { buildPrompt, ruleCard, warmupPrompt } from './lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath } from './lib/state.js';
 import { applyUpdate, checkForUpdate, DEFAULT_REPO } from './lib/update.js';
 
@@ -323,6 +323,7 @@ export function apply(ctx, rawConfig = {}) {
     preset: config.preset,
     thinkHeader: config.thinkHeader,
     fakeHistory: config.fakeHistory,
+    warmup: config.warmup,
     extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
     version: VERSION,
   });
@@ -424,7 +425,10 @@ export function apply(ctx, rawConfig = {}) {
       if (injectedTurns.get(agentId) === payload.turn) return decision;
       injectedTurns.set(agentId, payload.turn);
     }
-    appendWarmup(payload);
+    // The warm-up agreement is prompt text since v1.6.1 (see buildPrompt). Do not
+    // append session events here: agent/pre-step runs before the host writes
+    // step/start, so an assistant/message row written now has no open turn/step
+    // and makes the whole session unloadable on restore.
     return {
       ...decision,
       messages: [
@@ -439,76 +443,15 @@ export function apply(ctx, rawConfig = {}) {
     };
   });
 
-  // Sessions whose warm-up exchange has already been written (or confirmed
-  // present), so re-entering a conversation never duplicates it.
-  const warmedSessions = new Set();
-
-  /**
-   * Write the warm-up exchange into the session once, as two real events:
-   * a user question and an assistant commitment stamped with the host's real
-   * provider/model. Both are ordinary session rows, so the format validators
-   * and session restore accept them; later requests then continue an established
-   * agreement instead of re-deciding from scratch.
-   * @param {{ agent?: { session?: any, options?: { provider?: string, model?: string } }, turn?: number, step?: number }} payload
-   */
-  function appendWarmup(payload) {
-    if (config.warmup === false) return;
-    const session = payload?.agent?.session;
-    if (!session || typeof session.append !== 'function') return;
-    const sessionId = session.id === undefined ? null : String(session.id);
-    if (sessionId !== null && warmedSessions.has(sessionId)) return;
-    let messages = [];
-    try {
-      messages = typeof session.deriveMessages === 'function' ? session.deriveMessages() : [];
-    } catch {
-      messages = [];
-    }
-    const already = messages.some((message) => message?.source?.kind === PRODUCER_KIND && message?.source?.warmup === true);
-    if (already) {
-      if (sessionId !== null) warmedSessions.add(sessionId);
-      return;
-    }
-    const provider = payload?.agent?.options?.provider;
-    const model = payload?.agent?.options?.model;
-    if (typeof provider !== 'string' || provider.length === 0 || typeof model !== 'string' || model.length === 0) {
-      debug('warmup skipped: agent has no provider/model');
-      return;
-    }
-    const text = warmupText(language);
-    // Event shapes follow the host's own rows exactly (see a real session log):
-    // a `user/message` row is the bare message (no turn/step on the data — the
-    // surface node owns its position), and an `assistant/message` row carries
-    // `{turn, step, message, usage, stream}`. Omitting `stream` is not cosmetic:
-    // the restore validator requires `Array.isArray(data.stream)` and several
-    // session/event consumers read the stream/usage settlement fields, so a
-    // stream-less warm-up row makes the host throw while the turn is starting.
-    const settlement = Number.isFinite(payload?.turn) && Number.isFinite(payload?.step)
-      ? { turn: payload.turn, step: payload.step }
-      : {};
-    try {
-      session.append('user/message', {
-        id: randomUUID(),
-        role: 'user',
-        content: [{ type: 'text', text: text.question }],
-        source: { kind: PRODUCER_KIND, warmup: true },
-      }, { surfaceOp: 'append' });
-      session.append('assistant/message', {
-        ...settlement,
-        message: {
-          id: randomUUID(),
-          role: 'assistant',
-          content: [{ type: 'text', text: text.commitment }],
-          source: { kind: 'model', provider, model, warmup: true },
-        },
-        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0 },
-        stream: [],
-      }, { surfaceOp: 'append' });
-      if (sessionId !== null) warmedSessions.add(sessionId);
-      debug('warmup exchange written');
-    } catch (error) {
-      debug('warmup failed:', String(error));
-    }
-  }
+  // -------------------------------------------------------------------------
+  // Warm-up: prompt-only since v1.6.1. The wording lives in lib/prompt.js
+  // (warmupPrompt) and reaches the model through the footer section, so no
+  // session rows are written from this plugin. v1.5.0/v1.6.0 appended a
+  // user/message + assistant/message pair from the agent/pre-step waterfall,
+  // before the host wrote step/start; the append path accepted it but restore
+  // validation rejected it with `assistant/message does not match an open turn
+  // and step`, leaving the stored session unreadable.
+  // -------------------------------------------------------------------------
 
   // -------------------------------------------------------------------------
   // Assembly guard. A `complete` section elsewhere replaces every section after
@@ -997,7 +940,7 @@ export function apply(ctx, rawConfig = {}) {
             `dsh-sunder ${VERSION}`,
             `enabled=${config.enabled !== false}`,
             `language=${language} (raw ${String(config.language)}) preset=${config.preset} think_header=${prompt.thinkHeader === null ? 'off' : 'on'} fake_history=${prompt.fakeHistory === null ? 'off' : 'on'} warmup=${warmupLabel()}`,
-            `warmup_question=${config.warmup === false ? '(off)' : JSON.stringify(warmupText(language).question)}`,
+            `warmup_prompt=${config.warmup === false ? '(off)' : JSON.stringify(warmupPrompt(language))}`,
             `think_header_value=${prompt.thinkHeader === null ? '(none)' : prompt.thinkHeader}`,
             `fake_history_chars=${prompt.fakeHistory === null ? 0 : prompt.fakeHistory.length}`,
             `announcements=${config.announcements !== false} limit=${config.announceLimit} bundled_fallback=${config.bundledAnnouncements !== false}`,
@@ -1024,7 +967,7 @@ export function apply(ctx, rawConfig = {}) {
         properties: {
           language: { type: 'string', enum: ['zh', 'en'], description: 'Override the language pack for this preview.' },
           preset: { type: 'string', enum: ['full', 'concise', 'dev'], description: 'Override the preset for this preview.' },
-          section: { type: 'string', enum: ['all', 'identity', 'rules', 'footer', 'card', 'warmup'], description: 'Which section to print (default all). `card` is the per-turn user message and `warmup` the once-per-session exchange, neither is a prompt section.' },
+          section: { type: 'string', enum: ['all', 'identity', 'rules', 'footer', 'card', 'warmup'], description: 'Which section to print (default all). `card` is the per-turn user message and `warmup` the footer prompt line carrying the warm-up agreement; neither is a separate prompt section.' },
         },
       },
       output,
@@ -1036,15 +979,15 @@ export function apply(ctx, rawConfig = {}) {
           preset: previewPreset,
           thinkHeader: config.thinkHeader,
           fakeHistory: config.fakeHistory,
+          warmup: config.warmup,
           extraPrompt: typeof config.extraPrompt === 'string' ? config.extraPrompt.trim() : '',
           version: VERSION,
         });
         const which = args?.section ?? 'all';
-        const warmup = warmupText(previewLanguage);
+        const warmup = warmupPrompt(previewLanguage);
         const warmupPart = [
-          `## warmup (once-per-session exchange, ${warmupLabel()})`,
-          `user: ${warmup.question}`,
-          `assistant: ${warmup.commitment}`,
+          `## warmup (injected into the footer prompt, ${warmupLabel()})`,
+          `prompt: ${warmup}`,
         ];
         const parts = which === 'all'
           ? [

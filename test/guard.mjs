@@ -146,49 +146,26 @@ try {
   const secondTurn = await preStep({ agent: { id: 'a1' }, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
   check(secondTurn.messages.length === 2, 'the next turn gets its own card');
 
-  // Warm-up exchange: written once per session as two real events (a user
-  // question and a model-source assistant commitment), before the request.
+  // Warm-up is prompt-only since v1.6.1: agent/pre-step must never append session
+  // rows. v1.5.0/v1.6.0 wrote a user/message + assistant/message pair here, before
+  // the host wrote step/start; append accepted it but restore validation did not,
+  // so the stored session became unreadable (the "history load failed" bug).
   const appended = [];
   const session = {
     id: 'warm-session',
     append(type, data, options) {
       appended.push({ type, data, options });
-      return { type, seq: appended.length - 1 };
     },
     deriveMessages() {
-      return appended.map((entry) => (entry.type === 'assistant/message' ? entry.data.message : { ...entry.data, role: 'user' }));
+      return [];
     },
   };
   const warmAgent = { id: 'warm-1', options: { provider: 'deepseek-account', model: 'deepseek-flash' }, session };
   await preStep({ agent: warmAgent, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
-  check(appended.length === 2, 'warmup writes two events', String(appended.length));
-  check(appended[0]?.type === 'user/message' && appended[0]?.data?.role === 'user', 'warmup question is a real user message', JSON.stringify(appended[0]?.type));
-  check(appended[1]?.type === 'assistant/message' && appended[1]?.data?.message?.role === 'assistant', 'warmup commitment is a real assistant message');
-  check(
-    appended[1]?.data?.message?.source?.kind === 'model'
-      && appended[1]?.data?.message?.source?.provider === 'deepseek-account'
-      && appended[1]?.data?.message?.source?.model === 'deepseek-flash',
-    'warmup commitment carries the host provider/model source',
-    JSON.stringify(appended[1]?.data?.message?.source),
-  );
-  check(appended.every((entry) => entry.options?.surfaceOp === 'append'), 'warmup events are appended to the surface');
-  check(appended.every((entry) => entry.data?.source?.warmup === true || entry.data?.message?.source?.warmup === true), 'warmup events are tagged for dedupe');
-  check(appended[0]?.data?.turn === undefined && appended[0]?.data?.step === undefined, 'warmup question keeps the bare user/message data shape');
-  check(Array.isArray(appended[1]?.data?.stream) && appended[1].data.stream.length === 0, 'warmup commitment carries the settlement stream array');
-  check(appended[1]?.data?.usage !== undefined && typeof appended[1].data.usage.totalTokens === 'number', 'warmup commitment carries settlement usage');
-  check(appended[1]?.data?.turn === 1 && appended[1]?.data?.step === 1, 'warmup commitment is stamped with the open turn/step');
-
-  await preStep({ agent: warmAgent, turn: 2, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
-  check(appended.length === 2, 'warmup is written once per session', String(appended.length));
-
-  const noModel = { id: 'warm-2', options: {}, session: { id: 'warm-session-2', append: () => { throw new Error('should not append'); }, deriveMessages: () => [] } };
-  let noModelError;
-  try {
-    await preStep({ agent: noModel, turn: 1, step: 1, messages: claimed, signal: { aborted: false } }, async () => enter);
-  } catch (error) {
-    noModelError = error;
-  }
-  check(noModelError === undefined, 'warmup is skipped when the agent has no provider/model', String(noModelError));
+  check(appended.length === 0, 'pre-step never writes warm-up rows into the session log', String(appended.length));
+  const footerSection = sections.find((section) => section.name === 'sunder:footer');
+  const footerText = typeof footerSection?.text === 'function' ? footerSection.text({}) : footerSection?.text ?? '';
+  check(footerText.includes('直接给完整内容'), 'footer prompt carries the warm-up agreement', String(footerText).slice(-60));
 
   const toolStep = await preStep({ agent: { id: 'a1' }, turn: 3, step: 2, messages: claimed, signal: { aborted: false } }, async () => enter);
   check(toolStep.messages.length === 1, 'tool rounds inherit the card instead of restating it');

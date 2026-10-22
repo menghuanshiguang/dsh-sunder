@@ -6,6 +6,31 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-22
+
+### Fixed
+
+- **会话热身导致存储日志损坏，历史加载失败/消息页空白**：1.5.0–1.6.0 在 `agent/pre-step` 里向
+  session 追加 `user/message` + `assistant/message` 两条预热事件，但 DSH 先调度 `agent/pre-step`、
+  之后才写 `step/start`（`dsh-agent-loop/lib/index.js` 中 preStep 约 909 行、`step/start` 约 970 行）。
+  `Session.append()` 不校验 turn/step 关系，恢复校验（`assertReleasedV4Relationships`）却要求
+  `assistant/message` 必须落在已打开的 step 里，于是整条会话在重启或切换后报
+  `SessionFormatError: assistant/message does not match an open turn and step`：历史加载失败、
+  消息页空白；因为进程内还能读到，所以表现为「时好时坏」。插件热重载后向已有会话补写热身同样中招。
+- **热身改为纯提示词注入**：`lib/prompt.js` 新增 `warmupPrompt()`，把确认文案并入 footer 提示段；
+  `index.js` 删除 `appendWarmup()` 和全部会话写入，`agent/pre-step` 只保留每轮规则卡（合法的
+  user/message）。存储日志不再新增事件，恢复校验通过。
+- `test/guard.mjs` 回归断言 pre-step 不写任何会话事件；`test/source.mjs` 用宿主真实 `Session`
+  构造函数固化「预热行排在 step/start 之前必坏、排在之后可恢复」的顺序回归。
+- 本机清点 164 条历史会话：修复 5 条已损坏日志（三条新会话删除预热两行并重排 seq 与
+  `throughSeq`/`messageSeqs` 引用；两条中招会话交换 `step/start` 与 `assistant/message` 的 data），
+  全部通过 `assertV4RowAdmission` + `restoreReleasedV4Artifact` 校验。
+
+### Notes
+
+- 只改日志写入方式，提示词语义不变；不想要这段确认文案可设 `warmup: false`。
+- 升级后需重启 DSH 才会加载新代码。
+
 ## [1.6.0] - 2026-10-22
 
 ### Changed

@@ -1,6 +1,6 @@
 {
   "name": "dsh-sunder",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Sunder: an open-source DSH bundle that swaps the deployment persona for an unrestricted prompt pack, with presets, release announcements, self-update checks, install scripts and a settings UI.",
   "type": "module",
   "main": "index.js",

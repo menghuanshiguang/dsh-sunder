@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-6-1",
+    "level": "warn",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.6.1：修复会话日志损坏导致的历史加载失败",
+      "en": "Sunder 1.6.1: fixes corrupt session logs that broke history loading"
+    },
+    "body": {
+      "zh": "1.5.0–1.6.0 的会话热身会在 DSH 写入 `step/start` 之前追加 user/message + assistant/message，恢复校验会拒绝整条会话（历史加载失败、消息页空白、时好时坏）。1.6.1 不再写任何会话事件：热身改由 footer 提示词注入（warmupPrompt），agent/pre-step 只保留每轮规则卡；已损坏日志可用修复脚本恢复。升级后重启 DSH 生效。",
+      "en": "The 1.5.0–1.6.0 warm-up appended user/message + assistant/message before DSH wrote `step/start`; restore validation then rejected the whole session (history load failure, blank message page, intermittent). 1.6.1 writes no session events at all: the warm-up text is injected through the footer prompt (warmupPrompt) and agent/pre-step only adds the per-turn rule card. Existing corrupt logs can be repaired with the repair script. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.6.1",
+    "minVersion": "1.6.1"
+  },
+  {
     "id": "2026-10-22-sunder-1-6-0",
     "level": "warn",
     "date": "2026-10-22",
