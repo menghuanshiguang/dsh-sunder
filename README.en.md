@@ -458,44 +458,50 @@ Sunder operating rules (concise · highest priority):
 …
 ```
 
-## Settings card and announcement banner (v1.1.0)
+## Settings card and announcement banner (v1.1.0, host bridge since v1.3.1)
 
 The bundle ships a browser-side half (`lib/client.js`; `package.json`
 `dsh.client` declares `platform: "web"` and injects
 `@deepseek-ai/dsh-client-ui-renderer` and `@deepseek-ai/dsh-api-remotes`) that
 the client module loader installs at DSH startup
 (`window.__ModuleLoader__.load({ id: "dsh-sunder", … })`). It registers two
-slots, **both read-only**:
+slots:
 
 | Slot | id | Location | Content |
 | --- | --- | --- | --- |
-| `settings.section` | `sunder` | A `Sunder` section in the DSH settings page (order 60) | Version, enabled state and mount stage, language / preset / guard, unread count, last update check, latest version, repository and release links; buttons: `Refresh`, `Mark all read` |
+| `settings.section` | `sunder` | A `Sunder` section in the DSH settings page (order 60) | Version, enabled state, language / preset / guard / `think_header` / `fake_history`, unread count, last update check, latest version, repository and release links; buttons: `Refresh`, `Mark all read` |
 | `shell.overlay` | `sunder-notice` | Bottom-right banner | Title of the newest unread announcement, unread total, link, and an `×` to dismiss |
 
-**Why read-only:** the client plugin cannot see host configuration (`index.js`
-declares no Config schema, and `remote.settings.describe()` has no `sunder`
-entry), so the card usually shows "unknown" for language / preset / guard and
-says why; it also never writes the host `state.json`. Configuration still means
-editing `cordis.patch.yml` and restarting. Use `sunder_config` to confirm the
-effective values.
+**Where the numbers come from: a same-origin host HTTP bridge (v1.3.1).** The
+host half (`lib/bridge.js`) uses `ctx.inject(['webServer'])` to register
+`GET /sunder/api/status`, `POST /sunder/api/ack` and `POST /sunder/api/refresh`.
+The card asks the bridge first, so those values are real: version, enabled
+state, `language`, `preset`, `guard`, `thinkHeader`, `fakeHistory`, unread
+announcement bodies, feed source and error, the update-check result and
+`statePath`. `Refresh` forces a host refresh and `Mark all read` writes the
+host `state.json` — the card and `sunder_status` now share one read state.
 
-**Read state lives in the browser.** The client keeps three `localStorage`
-keys: `dsh-sunder.acked` (ids marked read), `dsh-sunder.dismissed` (ids whose
-banner was closed) and `dsh-sunder.cache` (announcements and version verdict;
-announcements 30 minutes, version 6 hours). Clearing those three returns the
-card to "everything unread".
+**Configuration is still read-only.** The host half declares no Config schema
+and the bridge exposes reads only; changing configuration still means editing
+`cordis.patch.yml` and restarting. Use `sunder_config` or `sunder_status` to
+confirm the effective values.
 
-> The two read-state stores are **independent**: `sunder_notice action=ack`
-> changes the host `state.json` (and therefore the prompt), while the card's
-> unread count comes from `localStorage`. That is why the card can still show an
-> unread badge after the announcement left the prompt.
+**Degradation is automatic.** On an older host (< 1.3.1), a headless profile
+without `webServer`, or a failed request, the card falls back to
+`remote.pluginManager` / `remote.pluginInventory` plus direct GitHub calls,
+shows "unknown" for the settings it cannot read and says why.
 
-The card's `Refresh` only refreshes the browser cache (the client talks to the
-GitHub API itself); it never triggers a host check. Without a host bridge the
-card degrades to static information and the plugin itself is unaffected.
+**No more GitHub calls from the card.** Before v1.3.1 the client fetched
+`api.github.com` and `raw.githubusercontent.com` itself, so unauthenticated rate
+limits surfaced as `feed: HTTP 429`. With the bridge answering, the client sends
+no GitHub request at all; feed errors come from the host chain and are also
+reported by `sunder_status`.
 
 The banner shows at most **3** unread announcements since v1.2.0 — the value now
-matches the host `announceLimit` default, where earlier versions used 5.
+matches the host `announceLimit` default, where earlier versions used 5. Read
+state lives in `state.json` while the bridge works; the browser `localStorage`
+keys (`dsh-sunder.acked` / `dsh-sunder.dismissed` / `dsh-sunder.cache`) are only
+the fallback.
 
 ## State file
 
@@ -591,6 +597,28 @@ node scripts/doctor.mjs --profile D:\some\profile  # check a specific profile
 node scripts/doctor.mjs --json                     # machine-readable report
 node scripts/doctor.mjs --no-network               # skip every network probe
 ```
+
+## What's new in v1.3.1
+
+- **Host HTTP bridge (`lib/bridge.js`)**: the host registers the same-origin
+  routes `/sunder/api/status`, `/sunder/api/ack` and `/sunder/api/refresh`, with
+  one envelope (`{ok:true,value}` / `{ok:false,error:{code,message}}`), 403 for
+  cross-origin calls, 400 for bad JSON and 413 for oversized bodies. It is not
+  registered at all on a headless profile without `webServer`, and never throws.
+- **The settings card reads the bridge first**: real version, enabled state,
+  `language`, `preset`, `guard`, `thinkHeader`, `fakeHistory`, unread
+  announcements, feed source/error, update result and `statePath`. `Refresh` and
+  `Mark all read` now go through the host, so the card and `sunder_status` share
+  one read state (`state.json`); `localStorage` is only the fallback.
+- **`feed: HTTP 429` is gone**: with the bridge answering, the client stops
+  calling GitHub, so unauthenticated rate limits and blocked raw hosts cannot
+  surface in the settings page.
+- **`doctor` and `DSH_PROFILE`**: `DSH_PROFILE=desktop` is a profile *name*, not
+  a path. It now resolves to `<DSH_HOME>/profiles/desktop`; an absolute
+  `DSH_PROFILE` is used as-is and `--profile` still wins. `defaultProfileDir()`
+  is based on `DSH_HOME` too.
+- **New tests**: `test/bridge.mjs` (37 offline assertions) and four host-bridge
+  groups in `test/client.mjs`.
 
 ## What's new in v1.2.0
 

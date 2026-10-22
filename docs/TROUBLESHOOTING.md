@@ -228,7 +228,9 @@ Get-Content "<profile>\cordis.patch.yml" | Select-String -Context 0,10 'id: sund
 | 状态文件在别处 | 设置了 `DSH_HOME` 的话，路径是 `$DSH_HOME/sunder/state.json` |
 | 想确认 guard 在不在 | `sunder_status` 的 `guard=on`；`guard: false` 时 waterfall 兜底仍会在，但访问器不装 |
 | 面板只显示 3 条公告 | 客户端横幅上限固定 3 条，和宿主默认 `announceLimit: 3` 对齐；想多看就把 `announceLimit` 调大，或用 `sunder_notice action=list` |
-| 面板里语言/预设显示"未知" | 正常：客户端只能读 `pluginManager`/`pluginInventory`，读不到 config schema。以 `cordis.patch.yml` 与 `sunder_status` 为准 |
-| `doctor` 报 `profile` fail | 传 `--profile <真实 profile 目录>`；默认值按 `DSH_HOME` 推导，`DSH_HOME` 为空时是 `~/.dsh/profiles/desktop` |
+| 面板里语言/预设显示"未知" | v1.3.0 及更早的 host 没有 HTTP 桥，只能读 `pluginManager`/`pluginInventory`。升级到 1.3.1 并重启后，面板走 `/sunder/api/status`，显示真实值；桥失败时看卡片底部 `host 桥：` 告警 |
+| 面板显示 `公告源: HTTP 429` | v1.3.1 前客户端直连 `api.github.com` 触发了未认证限流。升级并重启后客户端不再请求 GitHub；host 侧 feed 走 `api.github.com` 镜像 + 随包兜底，不会 429 |
+| 面板顶部提示"未连上 host 桥" | 当前 host 没注册 `/sunder/api/*`：DSH < 1.3.1，或 profile 没有 `webServer`（headless）。面板自动降级为只读静态信息 |
+| `doctor` 报 `profile` fail | 传 `--profile <真实 profile 目录>`；v1.3.1 起 `DSH_PROFILE=desktop` 这类 profile **名字**会解析成 `<DSH_HOME>/profiles/desktop`（之前会被当成相对路径），`DSH_HOME` 为空时是 `~/.dsh` |
 
 还搞不定 → 开 issue，附上[第 7 节](#7-怎么收集诊断信息)的材料。设计层面的"为什么这样"看 [ARCHITECTURE](./ARCHITECTURE.md)。

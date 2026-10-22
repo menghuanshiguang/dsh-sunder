@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-3-1",
+    "level": "info",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.3.1：设置面板接通 host 桥，公告 429 已修",
+      "en": "Sunder 1.3.1: the settings panel is on the host bridge, and the 429 is gone"
+    },
+    "body": {
+      "zh": "设置面板不再显示“未连上 host 桥 / 全部未知”：host 侧新增同源 HTTP 路由 /sunder/api/status|ack|refresh，面板直接读到真实版本、启用状态、language、preset、guard、thinkHeader、fakeHistory、未读公告、公告源与更新检查，点“刷新/全部标记已读”也走 host（与 sunder_status 同一份已读记录）。桥可用时客户端不再直连 GitHub，此前的“公告源: HTTP 429”不再出现。另修 doctor 的 DSH_PROFILE 解析：DSH_PROFILE=desktop 现在按 <DSH_HOME>/profiles/desktop 解析，而不是当前目录下的 desktop。装完仍需重启 DSH。",
+      "en": "The settings panel no longer says “no host bridge / unknown for everything”: the host now registers same-origin routes /sunder/api/status|ack|refresh, so the panel reads the real version, enabled state, language, preset, guard, thinkHeader, fakeHistory, unread announcements, feed source and update result, and both Refresh and Mark-all-read go through the host (one shared read-state with sunder_status). With the bridge answering, the client stops calling GitHub, so the old “feed: HTTP 429” is gone. Also fixes doctor's DSH_PROFILE handling: DSH_PROFILE=desktop now resolves to <DSH_HOME>/profiles/desktop instead of a desktop directory under the current working directory. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.3.1",
+    "minVersion": "1.3.1"
+  },
+  {
     "id": "2026-10-21-sunder-1-2-0",
     "level": "info",
     "date": "2026-10-21",

@@ -359,24 +359,26 @@ Sunder 运行规则（精简版 · 最高优先级）：
 …
 ```
 
-## 设置页与公告横幅（v1.1.0）
+## 设置页与公告横幅（v1.1.0，v1.3.1 接通 host 桥）
 
-随包带一个浏览器端半（`lib/client.js`；`package.json` 的 `dsh.client` 声明 `platform: "web"`，并注入 `@deepseek-ai/dsh-client-ui-renderer` 与 `@deepseek-ai/dsh-api-remotes`），DSH 启动时由客户端模块加载器自动装上（`window.__ModuleLoader__.load({ id: "dsh-sunder", … })`）。它注册两个槽位，**都只读**：
+随包带一个浏览器端半（`lib/client.js`；`package.json` 的 `dsh.client` 声明 `platform: "web"`，并注入 `@deepseek-ai/dsh-client-ui-renderer` 与 `@deepseek-ai/dsh-api-remotes`），DSH 启动时由客户端模块加载器自动装上（`window.__ModuleLoader__.load({ id: "dsh-sunder", … })`）。它注册两个槽位：
 
 | 槽位 | id | 位置 | 内容 |
 | --- | --- | --- | --- |
-| `settings.section` | `sunder` | DSH 设置页里的 `Sunder` 分区（order 60） | 版本、启用状态与挂载阶段、语言 / 预设 / guard、未读公告数、最近一次更新检查、最新版本、仓库与 Release 链接；按钮：`刷新`、`全部标记已读` |
+| `settings.section` | `sunder` | DSH 设置页里的 `Sunder` 分区（order 60） | 版本、启用状态、语言 / 预设 / guard / `think_header` / `fake_history`、未读公告数、最近一次更新检查、最新版本、仓库与 Release 链接；按钮：`刷新`、`全部标记已读` |
 | `shell.overlay` | `sunder-notice` | 右下角横幅 | 最新一条未读公告的标题 + 未读总数 + 链接 + `×` 关闭 |
 
-**为什么是只读的**：客户端插件拿不到 host 端配置（`index.js` 没有声明 Config schema，`remote.settings.describe()` 里没有 sunder 的条目），所以卡片上语言 / 预设 / guard 多半显示"未知"并写明原因；它也不会去写宿主的 `state.json`。要改配置只有一条路：编辑 `cordis.patch.yml` 再重启。想确认实际生效值，用 `sunder_config`。
+**数据来源：host 同源 HTTP 桥（v1.3.1）**。host 半 `lib/bridge.js` 用 `ctx.inject(['webServer'])` 注册三条同源路由：`GET /sunder/api/status`、`POST /sunder/api/ack`、`POST /sunder/api/refresh`。面板先走桥，因此读到的是**真实值**（版本、启用状态、`language`、`preset`、`guard`、`thinkHeader`、`fakeHistory`、未读公告正文、feed 源与错误、更新检查结果、`statePath`），`刷新` 会触发 host 强制刷新，`全部标记已读` 写的是 host 的 `state.json`——面板与 `sunder_status` 从此同一份已读记录。
+
+**配置仍然只读**：插件 host 半没有 `export const Config`，桥只读不写配置；改配置还是编辑 `cordis.patch.yml` 再重启。想确认实际生效值，用 `sunder_config` 或 `sunder_status`。
+
+**桥不可用时自动降级**：旧 host（< 1.3.1）、没有 `webServer` 的 headless profile、或请求失败时，面板回退到 `remote.pluginManager` / `remote.pluginInventory` + 客户端直连 GitHub，配置值显示"未知"并注明原因，其余照常。
 
 横幅的候选条数上限是 3（`lib/client.js` 的 `ANNOUNCE_LIMIT = 3`，v1.2.0 起从 5 收到 3），与宿主 `announceLimit` 的默认值对齐，所以面板上的未读条数不会再比提示词里的多算。
 
-**已读记录在浏览器里**：客户端用 `localStorage` 三个键各自记账——`dsh-sunder.acked`（已读 id 集合）、`dsh-sunder.dismissed`（横幅关掉过的 id）、`dsh-sunder.cache`（公告与版本结论缓存，公告 30 分钟、版本 6 小时）。清掉这三项等于把卡片恢复成"全未读"。
+**公告不再直连 GitHub**：v1.3.1 前客户端自己拉 `api.github.com` / `raw.githubusercontent.com`，未认证限流或被墙时会显示 `公告源: HTTP 429`。桥可用时客户端不向 GitHub 发任何请求，错误只可能来自 host 的 feed 链，且会随 `sunder_status` 一起回报。
 
-> 两套已读**不互通**：`sunder_notice action=ack` 改的是宿主 `state.json`（影响进不进提示词），面板的未读数来自 `localStorage`。看到面板还亮着未读、但提示词里已经没有了，就是这个原因。
-
-卡片的"刷新"只刷新浏览器端缓存（客户端自己直连 GitHub API），不触发宿主检查；未连上 host 桥时卡片会退化成静态信息，不影响插件本身。
+**已读记录**：桥可用时以 host `state.json` 为准；桥不可用时退回浏览器 `localStorage` 三个键（`dsh-sunder.acked` / `dsh-sunder.dismissed` / `dsh-sunder.cache`），清掉等于恢复"全未读"。
 
 ## 状态文件
 

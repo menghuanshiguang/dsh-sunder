@@ -6,6 +6,36 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-22
+
+### Added
+
+- **host HTTP 桥（`lib/bridge.js`）**：插件在 host 侧用 `ctx.inject(['webServer'])` 注册同源路由
+  `/sunder/api/*`——`GET /status`、`POST /ack`、`POST /refresh`，统一信封
+  `{ok:true,value}` / `{ok:false,error:{code,message}}`；跨源请求 403、非 JSON 400、超大 body 413。
+  headless profile 没有 `webServer` 时整段不注册，也不报错。第三方 bundle 不能往 host 的 `remote`
+  服务加命名空间，HTTP 路由是唯一能在不修改 host 的前提下把真实配置送到设置页的通道。
+- **设置面板改走 host 桥**：版本、启用状态、`language` / `preset` / `guard` / `thinkHeader` /
+  `fakeHistory`、未读数与公告正文、feed 源与错误、更新检查结果、`statePath` 全部来自桥；
+  "全部标记已读"与"刷新"分别变成 `POST /ack {all:true}` 与 `POST /refresh`，host 与面板从此同一份
+  已读记录（浏览器 `localStorage` 只在桥不可用时兜底）。
+- `test/bridge.mjs`：37 条离线断言，覆盖四条路由、信封、405/404/403/400/413/500、缺 handler 降级、
+  `webServer` 注入与 dispose、注入/注册抛错不穿透。
+- `test/client.mjs` 增 4 组 host 桥用例：桥优先且不再请求 GitHub、ack/refresh 的 POST 形状、
+  500 时回退 `remote` + GitHub 且只记告警。
+
+### Fixed
+
+- **设置面板的 `公告源: HTTP 429`**：客户端此前自己直连 `api.github.com` / `raw.githubusercontent.com`，
+  命中未认证限流（或被墙）就把错误显示在面板上。桥可用时客户端不再发任何 GitHub 请求，429 与
+  网络失败不再出现在设置页；`bridge.available` 从此专指 host HTTP 桥（remote 回退标记 `kind:'remote'`）。
+- **`scripts/doctor.mjs` 的 `DSH_PROFILE` 解析**：`DSH_PROFILE=desktop` 是 profile **名字**，
+  之前被当成相对路径解析成 `<cwd>/desktop`，于是不传 `--profile` 时 doctor 报
+  `profile: no readable …\desktop\package.json` 并让 composition 失败。现在的优先级是
+  `--profile`（绝对原样 / 相对按 cwd 解析）→ `DSH_PROFILE`（绝对原样，否则
+  `<DSH_HOME>/profiles/<name>`）→ 默认 `desktop`；`defaultProfileDir()` 也改为基于 `DSH_HOME`。
+  `test/doctor.mjs` 增 6 条解析断言 + 1 组真实 fixture 端到端（共 38 条）。
+
 ## [1.3.0] - 2026-10-22
 
 ### Changed

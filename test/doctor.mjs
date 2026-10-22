@@ -12,7 +12,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 
 process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'sunder-doctor-home-'));
 
-const { runDoctor, defaultProfileDir } = await import('../scripts/doctor.mjs');
+const { runDoctor, defaultProfileDir, resolveProfileDir } = await import('../scripts/doctor.mjs');
 
 let failures = 0;
 function check(ok, label, detail = '') {
@@ -173,9 +173,64 @@ const healthyDeps = {
   check(broken.status === 1, 'CLI exits 1 when a check fails', `status=${broken.status}`);
 }
 
-// 8. default profile resolution ------------------------------------------------------
+// 8. profile resolution: --profile is a PATH, DSH_PROFILE is a NAME -----------------
 {
   check(defaultProfileDir({ DSH_HOME: 'C:/fake-home' }) === join('C:/fake-home', 'profiles', 'desktop'), 'default profile uses DSH_HOME');
+  check(
+    resolveProfileDir({}, { DSH_HOME: 'C:/fake-home', DSH_PROFILE: 'desktop' }) === join('C:/fake-home', 'profiles', 'desktop'),
+    'DSH_PROFILE is a profile NAME under DSH_HOME',
+    resolveProfileDir({}, { DSH_HOME: 'C:/fake-home', DSH_PROFILE: 'desktop' }),
+  );
+  check(
+    resolveProfileDir({}, { DSH_HOME: 'C:/fake-home', DSH_PROFILE: 'nightly' }) === join('C:/fake-home', 'profiles', 'nightly'),
+    'DSH_PROFILE name is not resolved against the cwd',
+    resolveProfileDir({}, { DSH_HOME: 'C:/fake-home', DSH_PROFILE: 'nightly' }),
+  );
+  check(
+    resolveProfileDir({}, { DSH_HOME: 'C:/fake-home', DSH_PROFILE: 'C:/elsewhere/profile' }) === 'C:/elsewhere/profile',
+    'absolute DSH_PROFILE is honoured as a path',
+  );
+  check(
+    resolveProfileDir({ profileDir: 'C:/explicit/profile' }, { DSH_PROFILE: 'desktop' }) === 'C:/explicit/profile',
+    '--profile wins over DSH_PROFILE',
+  );
+  check(
+    resolveProfileDir({ profileDir: 'relative/profile' }, {}) === join(process.cwd(), 'relative', 'profile'),
+    'relative --profile resolves from the cwd',
+    resolveProfileDir({ profileDir: 'relative/profile' }, {}),
+  );
+}
+
+// 9. DSH_PROFILE=<name> points the doctor at <DSH_HOME>/profiles/<name> --------------
+{
+  const namedHome = mkdtempSync(join(tmpdir(), 'sunder-doctor-named-home-'));
+  const namedProfile = join(namedHome, 'profiles', 'desktop');
+  writeJson(join(namedProfile, 'package.json'), {
+    name: 'named-profile',
+    dsh: { profile: { bundles: ['dsh-sunder'] } },
+  });
+  const namedSunder = join(namedProfile, 'node_modules', 'dsh-sunder');
+  writeJson(join(namedSunder, 'package.json'), {
+    name: 'dsh-sunder',
+    version: '7.7.7',
+    dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } },
+    exports: { './client': './lib/client.js' },
+  });
+  writeFileSync(join(namedSunder, 'cordis.patch.yml'), '[]\n');
+  mkdirSync(join(namedSunder, 'lib'), { recursive: true });
+  writeFileSync(join(namedSunder, 'lib', 'client.js'), 'export {};\n');
+
+  const report = await runDoctor({
+    env: { DSH_HOME: namedHome, DSH_PROFILE: 'desktop' },
+    runtimeDir: missingRuntimeDir,
+    noNetwork: true,
+    loadProfileImpl: async () => ({ ok: true, skippedBundles: [], rows: [] }),
+  });
+  check(report.profileDir === namedProfile, 'runDoctor follows DSH_PROFILE as a name', report.profileDir);
+  check(report.checks.find((c) => c.id === 'profile')?.status === 'ok', 'named profile is readable');
+  check(report.checks.find((c) => c.id === 'link')?.status === 'ok', 'named profile link resolves');
+  check(report.checks.find((c) => c.id === 'manifest')?.status === 'ok', 'named profile manifest is complete');
+  rmSync(namedHome, { recursive: true, force: true });
 }
 
 rmSync(root, { recursive: true, force: true });

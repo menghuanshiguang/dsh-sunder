@@ -32,16 +32,35 @@ function readJson(file) {
   }
 }
 
-/** Default profile lookup, mirroring the DSH launcher's notion of a desktop profile. */
-export function defaultProfileDir(env = process.env) {
-  const home = env.DSH_HOME ?? join(homedir(), '.dsh');
-  return join(home, 'profiles', 'desktop');
+/** DSH home directory (`DSH_HOME`, else `~/.dsh`). */
+function dshHome(env = process.env) {
+  return env.DSH_HOME ?? join(homedir(), '.dsh');
 }
 
-/** Resolve the profile directory from options/env. */
-function resolveProfileDir(options, env) {
-  const candidate = options.profileDir ?? env.DSH_PROFILE ?? defaultProfileDir(env);
-  return isAbsolute(candidate) ? candidate : resolve(candidate);
+/** Default profile lookup, mirroring the DSH launcher's notion of a desktop profile. */
+export function defaultProfileDir(env = process.env) {
+  return join(dshHome(env), 'profiles', 'desktop');
+}
+
+/**
+ * Resolve the profile directory from options/env.
+ *
+ * Precedence:
+ *   1. `--profile` value — a PATH: absolute is used as is, relative resolves from cwd
+ *   2. `DSH_PROFILE` — the launcher's profile NAME (e.g. "desktop"), not a path, so it
+ *      becomes `<DSH_HOME>/profiles/<name>`; an absolute path is still honoured
+ *   3. `defaultProfileDir()` — `<DSH_HOME>/profiles/desktop`
+ */
+export function resolveProfileDir(options = {}, env = process.env) {
+  if (typeof options.profileDir === 'string' && options.profileDir.trim() !== '') {
+    return isAbsolute(options.profileDir) ? options.profileDir : resolve(options.profileDir);
+  }
+  const named = typeof env.DSH_PROFILE === 'string' ? env.DSH_PROFILE.trim() : '';
+  if (named !== '') {
+    if (isAbsolute(named)) return named;
+    return join(dshHome(env), 'profiles', named);
+  }
+  return defaultProfileDir(env);
 }
 
 /** Default composition helper: real dsh-app-boot, or undefined when the runtime is absent. */
@@ -280,6 +299,8 @@ async function main(argv) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
       console.log('usage: node scripts/doctor.mjs [--profile <dir>] [--runtime <dir>] [--json] [--no-network]');
+      console.log('  --profile  profile DIRECTORY (default: $DSH_PROFILE as a profile NAME under $DSH_HOME/profiles,');
+      console.log('             else <DSH_HOME>/profiles/desktop)');
       console.log('read-only: checks the profile, the bundle, the prompt composition, the feed, updates and the state dir.');
       return 0;
     }

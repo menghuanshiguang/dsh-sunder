@@ -138,6 +138,58 @@ const makeFetch = (routes = {}) => {
   return fetchStub;
 };
 
+/** host HTTP 桥的 fetch 桩：同源 `/sunder/api/*`，其余请求一律 404。 */
+const HOST_STATUS = {
+  version: '1.3.1',
+  active: true,
+  enabled: true,
+  language: 'zh',
+  preset: 'full',
+  thinkHeader: false,
+  fakeHistory: '<thinking>…</thinking>\\n好的。',
+  guard: true,
+  tools: true,
+  announceLimit: 3,
+  unread: 1,
+  announcements: [
+    {
+      id: 'h1',
+      level: 'info',
+      date: '2026-10-22',
+      title: { zh: '主机公告', en: 'Host notice' },
+      body: { zh: '来自 host 的公告', en: 'from the host' },
+      link: 'https://github.com/menghuanshiguang/dsh-sunder/releases',
+      acknowledged: false,
+    },
+  ],
+  feed: { url: 'https://api.github.com/repos/menghuanshiguang/dsh-sunder/contents/announcements.json', source: 'https://api.github.com/repos/menghuanshiguang/dsh-sunder/contents/announcements.json', error: null },
+  update: { latest: '1.3.1', url: 'https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.3.1', newer: false, checkedAt: '2026-10-22T00:00:00.000Z', error: null },
+  repo: 'menghuanshiguang/dsh-sunder',
+  statePath: 'C:\\\\Users\\\\x\\\\.dsh\\\\sunder\\\\state.json',
+  node: '24.14.0',
+};
+
+const makeBridgeFetch = (payload = HOST_STATUS) => {
+  const calls = [];
+  const jsonResponse = (value) => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ ok: true, value }),
+    json: async () => ({ ok: true, value }),
+  });
+  const fetchStub = async (url, init = {}) => {
+    const path = String(url);
+    const method = String(init && init.method ? init.method : 'GET').toUpperCase();
+    calls.push({ url: path, method, body: init && init.body });
+    if (path === '/sunder/api/status' && method === 'GET') return jsonResponse(payload);
+    if (path === '/sunder/api/ack' && method === 'POST') return jsonResponse({ acked: 1, status: payload });
+    if (path === '/sunder/api/refresh' && method === 'POST') return jsonResponse(payload);
+    return { ok: false, status: 404, text: async () => '', json: async () => ({}) };
+  };
+  fetchStub.calls = calls;
+  return fetchStub;
+};
+
 /**
  * 造一个跑着 client.js 的 vm 环境。
  * @returns {{exports: object, spec: object, windowObject: object, storage: object, warnings: string[], context: object}}
@@ -247,10 +299,14 @@ test("导出 inject 是依赖数组 ['slots']", () => {
 
 test('__internals 暴露纯函数与常量', () => {
   const internals = moduleExports.__internals ?? {};
-  for (const key of ['refresh', 'getSnapshot', 'subscribe', 'selectAnnouncements', 'compareVersions', 'ANNOUNCE_LIMIT', 'PACKAGE_NAME', 'KNOWN_SLOTS']) {
+  for (const key of ['refresh', 'refreshHost', 'fetchHostStatus', 'ack', 'mergeHostStatus', 'hostBridgeUp', 'getSnapshot', 'subscribe', 'selectAnnouncements', 'compareVersions', 'truncate', 'ANNOUNCE_LIMIT', 'PACKAGE_NAME', 'KNOWN_SLOTS', 'REFRESH_ROUTES', 'TIMEOUTS']) {
     assert.ok(internals[key] !== undefined, `__internals.${key} 缺失`);
   }
   assert.equal(internals.ANNOUNCE_LIMIT, 3, '__internals.ANNOUNCE_LIMIT 应与宿主 announceLimit 默认值对齐');
+  assert.equal(internals.REFRESH_ROUTES.status, '/sunder/api/status', 'host 桥 status 路由应与 lib/bridge.js 一致');
+  assert.equal(internals.REFRESH_ROUTES.ack, '/sunder/api/ack');
+  assert.equal(internals.REFRESH_ROUTES.refresh, '/sunder/api/refresh');
+  assert.ok(typeof internals.TIMEOUTS.host === 'number' && internals.TIMEOUTS.host > 0);
   assert.equal(internals.PACKAGE_NAME, 'dsh-sunder');
   assert.ok(internals.KNOWN_SLOTS.has('settings.section'));
   assert.ok(internals.KNOWN_SLOTS.has('shell.overlay'));
@@ -410,7 +466,10 @@ await testAsync('refresh 从 remote 桥读到版本与挂载状态', async () =>
   assert.equal(snapshot.version, '1.0.1', '版本应来自 pluginManager.listBundles');
   assert.equal(snapshot.enabled, true);
   assert.equal(snapshot.fiberPhase, 'active');
+  // host HTTP 桥不可用（本 case 没有 /sunder/api/*）：remote 回退保留 bridge.kind='remote'，
+  // 只补版本/挂载状态，available 仍为 true 表示"有一个能用的数据源"。
   assert.equal(snapshot.bridge.available, true);
+  assert.equal(snapshot.bridge.kind, 'remote');
   assert.equal(snapshot.busy, false);
   assert.ok(fetchStub.calls.some((url) => url.includes('announcements.json')), '应拉取公告源');
   assert.ok(fetchStub.calls.some((url) => url.includes('releases/latest')), '应检查最新 release');
@@ -471,6 +530,98 @@ await testAsync('remote 信封 ok=false 时只记告警', async () => {
   const snapshot = mod.exports.__internals.getSnapshot();
   assert.equal(snapshot.version, null);
   assert.ok(typeof snapshot.warned === 'string' && snapshot.warned.includes('not permitted'), `warned=${snapshot.warned}`);
+});
+
+// ---------------------------------------------------------------------------
+// 6b. host HTTP 桥优先（lib/bridge.js 的客户端一侧）
+// ---------------------------------------------------------------------------
+await testAsync('host 桥可用时 refresh 直接用 host 数据且不请求 GitHub', async () => {
+  const fetchStub = makeBridgeFetch();
+  const mod = loadModule({ fetch: fetchStub });
+  const bridge = remoteCtx(); // remote 也有数据，但桥必须优先
+  mod.exports.apply(bridge.ctx);
+  await mod.exports.__internals.refresh(bridge.ctx, { force: true });
+  const snapshot = mod.exports.__internals.getSnapshot();
+  assert.equal(snapshot.bridge.available, true, 'bridge.available');
+  assert.equal(snapshot.bridge.kind, 'http', 'bridge.kind');
+  assert.equal(snapshot.version, '1.3.1');
+  assert.equal(snapshot.enabled, true);
+  assert.equal(snapshot.language, 'zh');
+  assert.equal(snapshot.preset, 'full');
+  assert.equal(snapshot.guard, true);
+  assert.equal(snapshot.fakeHistory, '<thinking>…</thinking>\\n好的。');
+  assert.equal(snapshot.thinkHeader, false, 'thinkHeader=false 原样透传，界面按关处理');
+  assert.equal(snapshot.unread, 1);
+  assert.equal(snapshot.announcements[0].id, 'h1');
+  assert.equal(snapshot.announcements[0].acknowledged, false);
+  assert.equal(snapshot.update.latest, '1.3.1');
+  assert.equal(snapshot.feedError, null, 'host 桥没有 feed 错误时不应显示 429');
+  assert.equal(snapshot.repo, 'menghuanshiguang/dsh-sunder');
+  assert.ok(String(snapshot.statePath).endsWith('state.json'));
+  assert.equal(fetchStub.calls.length, 1, `桥可用时只发一次 status，实际 ${fetchStub.calls.length}`);
+  assert.equal(fetchStub.calls[0].url, '/sunder/api/status');
+  assert.ok(!fetchStub.calls.some((call) => /api\.github\.com|raw\.githubusercontent/.test(call.url)), '桥可用时不得直连 GitHub');
+});
+
+await testAsync('host ack 走 POST /sunder/api/ack（all:true）', async () => {
+  const fetchStub = makeBridgeFetch();
+  const mod = loadModule({ fetch: fetchStub });
+  const internals = mod.exports.__internals;
+  const bridge = remoteCtx();
+  mod.exports.apply(bridge.ctx);
+  // 先刷新一次让 store 知道 HTTP 桥在线（ack 只在 host 桥可用时走 POST）。
+  await internals.refresh(bridge.ctx, { force: true });
+  const result = await internals.ack({ all: true });
+  assert.equal(result.ok, true, `ack 失败：${JSON.stringify(result)}`);
+  assert.equal(result.mode, 'http');
+  assert.equal(result.acked, 1);
+  const ackCall = fetchStub.calls.find((call) => call.url === '/sunder/api/ack');
+  assert.ok(ackCall, '没有 POST /sunder/api/ack');
+  assert.equal(ackCall.method, 'POST');
+  assert.deepEqual(JSON.parse(ackCall.body), { all: true });
+  assert.equal(internals.getSnapshot().ackMode, 'http');
+});
+
+await testAsync('host 刷新走 POST /sunder/api/refresh 并可直接套用到界面 state', async () => {
+  const fetchStub = makeBridgeFetch();
+  const mod = loadModule({ fetch: fetchStub });
+  const internals = mod.exports.__internals;
+  const bridge = remoteCtx();
+  mod.exports.apply(bridge.ctx);
+  await internals.refresh(bridge.ctx, { force: true });
+  const snapshot = await internals.refreshHost();
+  assert.equal(snapshot.bridge.available, true);
+  assert.equal(snapshot.bridge.kind, 'http');
+  assert.equal(snapshot.version, '1.3.1');
+  assert.ok(fetchStub.calls.some((call) => call.url === '/sunder/api/refresh' && call.method === 'POST'));
+});
+
+await testAsync('host 桥 500 时回退到 remote + GitHub 且只记告警', async () => {
+  const base = makeFetch();
+  const bridgeError = {
+    ok: false,
+    status: 500,
+    text: async () => JSON.stringify({ ok: false, error: { code: 'boom', message: 'host down' } }),
+    json: async () => ({ ok: false, error: { code: 'boom', message: 'host down' } }),
+  };
+  const calls = [];
+  const fetchStub = async (url, init) => {
+    if (String(url).startsWith('/sunder/api/')) {
+      calls.push(String(url));
+      return bridgeError;
+    }
+    return base(url, init);
+  };
+  const mod = loadModule({ fetch: fetchStub });
+  const bridge = remoteCtx();
+  mod.exports.apply(bridge.ctx);
+  await mod.exports.__internals.refresh(bridge.ctx, { force: true });
+  const snapshot = mod.exports.__internals.getSnapshot();
+  assert.equal(snapshot.bridge.kind, 'remote', '桥失败时应回退到 remote 数据源');
+  assert.equal(snapshot.version, '1.0.1', '版本应来自 remote 回退路径');
+  assert.ok(snapshot.update && snapshot.update.latest === '1.2.0', '更新检查应走回退路径');
+  assert.ok(typeof snapshot.hostError === 'string' && snapshot.hostError.length > 0, `hostError=${snapshot.hostError}`);
+  assert.ok(calls.length >= 1);
 });
 
 // ---------------------------------------------------------------------------

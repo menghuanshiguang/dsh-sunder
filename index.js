@@ -21,6 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_FEED, fetchAnnouncements, renderAnnouncements, selectAnnouncements } from './lib/announcements.js';
+import { registerSunderBridge } from './lib/bridge.js';
 import { buildPrompt, ruleCard } from './lib/prompt.js';
 import { ackAnnouncement, loadState, markSeen, saveState, statePath } from './lib/state.js';
 import { applyUpdate, checkForUpdate, DEFAULT_REPO } from './lib/update.js';
@@ -630,6 +631,85 @@ export function apply(ctx, rawConfig = {}) {
   }, Math.max(1, Number(config.updateIntervalHours) || 6) * 3_600_000);
   checkTimer.unref?.();
   ctx.effect(() => () => clearInterval(checkTimer));
+
+  // -------------------------------------------------------------------------
+  // Host bridge: a same-origin HTTP route for the settings panel.
+  //
+  // A third-party bundle cannot add namespaces to the host `remote` service, so
+  // the panel reads the snapshot below through `/sunder/api/*` instead. Headless
+  // profiles have no webServer: the bridge simply never registers and the client
+  // falls back to its degraded view.
+  // -------------------------------------------------------------------------
+  const ackedAnnouncements = () => new Set(state.ackedAnnouncements);
+
+  const bridgeStatus = () => {
+    const acked = ackedAnnouncements();
+    const notice = runtime.updateNotice;
+    const unread = runtime.unread.filter((item) => !acked.has(item.id));
+    return {
+      version: VERSION,
+      active: true,
+      enabled: true,
+      language,
+      preset: config.preset,
+      thinkHeader: prompt.thinkHeader === null ? false : prompt.thinkHeader,
+      fakeHistory: prompt.fakeHistory === null ? false : prompt.fakeHistory,
+      guard: config.guard !== false,
+      tools: config.tools !== false && Boolean(ctx.tools),
+      announceLimit: Math.max(0, Number(config.announceLimit) || 3),
+      unread: unread.length,
+      announcements: runtime.unread.map((item) => ({
+        id: item.id,
+        level: item.level,
+        date: item.date,
+        title: item.title,
+        body: item.body,
+        link: item.link,
+        acknowledged: acked.has(item.id),
+      })),
+      feed: {
+        url: config.feedUrl,
+        source: runtime.feedSource ?? null,
+        error: runtime.feedError ?? null,
+      },
+      update: notice === undefined || notice === null
+        ? null
+        : {
+          latest: notice.latest ?? null,
+          url: notice.url ?? null,
+          newer: notice.newer === true,
+          checkedAt: notice.checkedAt ?? null,
+          error: notice.error ?? null,
+        },
+      repo: config.repo,
+      statePath: stateFile,
+      node: process.versions.node,
+    };
+  };
+
+  const bridge = registerSunderBridge(ctx, {
+    status: bridgeStatus,
+    ack: (payload) => {
+      const ids = payload?.all === true
+        ? runtime.unread.map((item) => item.id)
+        : [payload?.id].filter((id) => typeof id === 'string' && id.length > 0);
+      let acked = 0;
+      for (const id of ids) {
+        if (state.ackedAnnouncements.includes(id)) continue;
+        ackAnnouncement(state, id);
+        acked += 1;
+      }
+      if (acked > 0) persist();
+      return { acked, status: bridgeStatus() };
+    },
+    refresh: async () => {
+      // Force both checks: the panel's "刷新" is an explicit user action.
+      await Promise.all([refreshAnnouncements(), runUpdateCheck(true)]);
+      return bridgeStatus();
+    },
+  });
+  ctx.effect(() => () => bridge.dispose());
+  debug('host bridge registered:', bridge.registered);
 
   // -------------------------------------------------------------------------
   // Tools. Optional: headless profiles can run without the tools service.

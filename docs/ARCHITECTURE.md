@@ -300,13 +300,14 @@ applyUpdate
 | `announcements.json` | 随包兜底 feed | —— |
 | `cordis.patch.yml` | bundle patch | —— |
 | `locale/*.json` | 客户端面板文案（v1.1.0） | —— |
-| `lib/client.js` | 客户端 UI：设置页只读卡片 + 公告横幅（`window.__ModuleLoader__` 形态） | —— |
+| `lib/client.js` | 客户端 UI：设置页卡片 + 公告横幅（`window.__ModuleLoader__` 形态）；v1.3.1 起优先读 host HTTP 桥 | —— |
+| `lib/bridge.js` | host 侧同源 HTTP 桥（v1.3.1）：`/sunder/api/status|ack|refresh`，信封 `{ok,value}` / `{ok:false,error}` | `BRIDGE_PREFIX`、`createBridgeHandler()`、`registerSunderBridge()` |
 | `scripts/install.mjs` | 安装 / 卸载（v1.1.0） | `install()`、`uninstall()`（`scripts/uninstall.mjs`）、`parseArgs()` |
-| `scripts/doctor.mjs` | 只读诊断 CLI（v1.2.0，10 项检查） | `runDoctor()`、`renderReport()`、`defaultProfileDir()` |
+| `scripts/doctor.mjs` | 只读诊断 CLI（v1.2.0，10 项检查；v1.3.1 修 `DSH_PROFILE` 解析） | `runDoctor()`、`renderReport()`、`defaultProfileDir()`、`resolveProfileDir()` |
 | `scripts/release.mjs` | 发版：bump、CHANGELOG、tag、Release | —— |
 | `scripts/publish-api.mjs` | 无 git 推送时的 API 发布（树/提交/ref/tag/Release） | —— |
 | `scripts/check-package.mjs` | 打包契约检查 | —— |
-| `test/*.mjs` | 单元、提示词、客户端、安装、更新、doctor、冒烟 | —— |
+| `test/*.mjs` | 单元、提示词、客户端、host 桥、安装、更新、doctor、守卫、冒烟 | —— |
 
 ## 相关文档
 
