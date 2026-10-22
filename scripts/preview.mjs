@@ -1,60 +1,97 @@
 #!/usr/bin/env node
 /**
- * Boot-screen screenshot for the Web profile.
+ * Explore the harness web UI and capture a few states.
  *
- *   node scripts/preview.mjs <url> <out.png> [--wait <ms>]
+ *   node preview.mjs <url> <outDir> [--wait <ms>]
  *
- * Opens the harness web UI in Chromium, waits for the app shell to settle, and
- * writes a full-page screenshot. Console errors and page failures are printed so
- * a failed run explains itself in the Action log.
+ * The first screenshot is the landing view; after that the script dismisses the
+ * preview notice and tries the obvious navigation entries (Plugins, More,
+ * Settings) so one run covers the surfaces a reviewer would open by hand.
+ * Every step prints the visible interactive labels, which is how the next
+ * iteration picks the right selector instead of guessing.
  */
 
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { join } from 'node:path';
 
-const [url, out] = process.argv.slice(2);
+const [url, outDir] = process.argv.slice(2);
 const waitIndex = process.argv.indexOf('--wait');
-const wait = waitIndex === -1 ? 15000 : Number(process.argv[waitIndex + 1]);
+const wait = waitIndex === -1 ? 8000 : Number(process.argv[waitIndex + 1]);
 
-if (url === undefined || out === undefined) {
-  console.error('usage: node scripts/preview.mjs <url> <out.png> [--wait <ms>]');
+if (url === undefined || outDir === undefined) {
+  console.error('usage: node preview.mjs <url> <outDir> [--wait <ms>]');
   process.exit(2);
 }
 
-let chromium;
-try {
-  ({ chromium } = await import('playwright'));
-} catch {
-  console.error('playwright is not installed; run `npm i playwright` first');
-  process.exit(2);
-}
-
-mkdirSync(dirname(out), { recursive: true });
+const { chromium } = await import('playwright');
+mkdirSync(outDir, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const problems = [];
+page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
 page.on('console', (message) => {
   if (message.type() === 'error') problems.push(`console: ${message.text()}`);
 });
-page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
-page.on('requestfailed', (request) => problems.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`));
+
+let shot = 0;
+const capture = async (name) => {
+  shot += 1;
+  const file = join(outDir, `${String(shot).padStart(2, '0')}-${name}.png`);
+  await page.screenshot({ path: file, fullPage: false });
+  console.log(`shot=${file}`);
+};
+
+const labels = async (step) => {
+  const texts = await page.evaluate(() => {
+    const nodes = [...document.querySelectorAll('button, a, [role="button"], [role="menuitem"], li')];
+    return nodes
+      .map((node) => (node.textContent ?? '').replace(/\s+/gu, ' ').trim())
+      .filter((text) => text.length > 0 && text.length < 60)
+      .slice(0, 60);
+  });
+  console.log(`labels[${step}]=${texts.join(' | ')}`);
+};
+
+const clickIf = async (name) => {
+  const target = page.getByText(name, { exact: false }).first();
+  if (await target.count() === 0) return false;
+  try {
+    await target.click({ timeout: 3000 });
+    await page.waitForTimeout(1200);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(wait);
-  const title = await page.title();
-  const text = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')) || '';
-  await page.screenshot({ path: out, fullPage: true });
-  console.log(`title=${title}`);
-  console.log(`screenshot=${out}`);
-  console.log(`body_chars=${text.length}`);
-  console.log(`body_preview=${text.replace(/\s+/gu, ' ').slice(0, 600)}`);
+  await capture('landing');
+  await labels('landing');
+
+  if (await clickIf('Continue')) {
+    await capture('notice-dismissed');
+    await labels('after-continue');
+  }
+
+  if (await clickIf('Plugins')) {
+    await capture('plugins');
+    await labels('plugins');
+  }
+
+  if (await clickIf('More')) {
+    await capture('more');
+    await labels('more');
+  }
+
+  console.log(`title=${await page.title()}`);
 } catch (error) {
   console.error(`preview failed: ${error.message}`);
-  await page.screenshot({ path: out, fullPage: true }).catch(() => {});
+  await page.screenshot({ path: join(outDir, 'error.png') }).catch(() => {});
   process.exitCode = 1;
 } finally {
-  if (problems.length > 0) console.log(`problems=${problems.slice(0, 10).join(' | ')}`);
+  if (problems.length > 0) console.log(`problems=${problems.slice(0, 8).join(' | ')}`);
   await browser.close();
 }
