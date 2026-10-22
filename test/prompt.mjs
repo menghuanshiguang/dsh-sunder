@@ -231,7 +231,7 @@ check(buildPrompt({ language: 'auto' }).identity.length > 0, 'auto 语言可解�
 // ---------------------------------------------------------------------------
 const offZh = buildPrompt({ language: 'zh', version: VERSION });
 const offEn = buildPrompt({ language: 'en', version: VERSION });
-check(offZh.thinkHeader === null, 'thinkHeader 默认关闭');
+check(offZh.thinkHeader === null, 'buildPrompt 未配置时不带头（插件默认值在 DEFAULTS）');
 check(!offZh.footer.includes('起始头'), '关闭时 footer 不含起始头说明');
 check(!offEn.footer.includes('Reply start header'), '关闭时英文 footer 不含起始头说明');
 
@@ -260,7 +260,7 @@ check(!promptSections({ language: 'zh' })[2].text.includes('起始头'), '默认
 // 伪造消息记录（fakeHistory）：默认关，true 用内置中英文样例，字符串自定义
 // ---------------------------------------------------------------------------
 const historyOff = buildPrompt({ language: 'zh', version: VERSION });
-check(historyOff.fakeHistory === null, 'fakeHistory 默认关闭');
+check(historyOff.fakeHistory === null, 'buildPrompt 未配置时不带记录（插件默认值在 DEFAULTS）');
 check(!historyOff.footer.includes('以下为本会话此前已经发生的对话'), '关闭时 footer 不含对话记录');
 
 const historyZh = buildPrompt({ language: 'zh', version: VERSION, fakeHistory: true });

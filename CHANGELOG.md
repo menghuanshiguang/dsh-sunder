@@ -6,6 +6,17 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-22
+
+### Changed
+
+- **`thinkHeader` 与 `fakeHistory` 默认开启**：从 1.4.0 起装完即生效，不再需要改配置。
+  `thinkHeader` 默认头是 `<thinking>`，`fakeHistory` 按 `language` 取内置中英文样例。
+  想关掉任意一个，在 `cordis.patch.yml` 里显式写 `false`。
+  理由：这两个开关是"强度"的直接来源，默认关等于装完之后什么也没发生；1.3.0 已经把它们
+  的文案与闭合标签问题修干净，默认开的代价（每轮多一段样例、回复多一行头）由用户可见、
+  可关。
+
 ## [1.3.1] - 2026-10-22
 
 ### Added

@@ -116,7 +116,7 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
 
 ### 安装后确认
 
-- DSH 启动日志里有 `[dsh-sunder] v1.3.0 active — language=zh, preset=full, think_header=off, fake_history=off, prompt sections registered, guard=on`；
+- DSH 启动日志里有 `[dsh-sunder] v1.3.0 active — language=zh, preset=full, think_header=on (<thinking>), fake_history=on, prompt sections registered, guard=on`；
 - 会话里调用 `sunder_status`，能看到 `placements=sunder:identity@-100000,sunder:rules@10150,sunder:footer@10300`；
 - 状态文件出现在 `$DSH_HOME/sunder/state.json`。
 
@@ -136,8 +136,8 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
       config:
         preset: concise             # v1.1.0
         language: zh
-        thinkHeader: false          # v1.2.0：伪造思考链起始头
-        fakeHistory: false          # v1.2.0：伪造消息记录
+        thinkHeader: true           # 默认开：伪造思考链起始头
+        fakeHistory: true           # 默认开：伪造消息记录
         extraPrompt: |
           本机没有外网，别建议我查在线文档。
 ```
@@ -149,8 +149,8 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
 | `enabled` | `true` | 总开关。`false` 时不注册任何提示词段、运行期上下文与工具（启动日志仍会打） |
 | `language` | `'auto'` | `zh` / `en` 强制语言；`auto` 跟随进程的 `Intl` 区域设置（`zh*` 用中文，其余用英文） |
 | `preset` | `'full'` | **v1.1.0 新增**。`full`（九条规则）/ `concise`（压缩到四条，文本长度约为 `full` 的 60%）/ `dev`（九条规则 + 编码代理附加段）。未知值回落到 `full`，同名未知值只警告一次。详见[预设](#预设v110) |
-| `thinkHeader` | `false` | **v1.2.0 新增**。伪造思考链起始头：`false` 关闭；`true` 用默认头 `<thinking>`；也可直接写任意字符串（自动 trim）作为头。开启后提示词要求每次回复先原样输出该头、空一行再写正文。详见[伪造思考链起始头](#伪造思考链起始头thinkheader--v120) |
-| `fakeHistory` | `false` | **v1.2.0 新增**。伪造消息记录：`false` 关闭；`true` 按 `language` 取内置中英文样例；也可直接写任意"此前的对话"文本（自动 trim）。内容只追加到 footer 段，让模型把它当作已发生的历史、以同样风格续写。详见[伪造消息记录](#伪造消息记录fakehistory--v120) |
+| `thinkHeader` | `true` | **v1.4.0 起默认开启**。伪造思考链起始头：`false` 关闭；`true` 用默认头 `<thinking>`；也可直接写任意字符串（自动 trim）作为头。开启后提示词要求每次回复先原样输出该头、空一行再写正文。详见[伪造思考链起始头](#伪造思考链起始头thinkheader--v120) |
+| `fakeHistory` | `true` | **v1.4.0 起默认开启**。伪造消息记录：`false` 关闭；`true` 按 `language` 取内置中英文样例；也可直接写任意"此前的对话"文本（自动 trim）。内容只追加到 footer 段，让模型把它当作已发生的历史、以同样风格续写。详见[伪造消息记录](#伪造消息记录fakehistory--v120) |
 | `extraPrompt` | `''` | 追加到规则段末尾的自定义文本（自动 trim；空串等于不追加） |
 | `announcements` | `true` | 公告中心开关 |
 | `announceLimit` | `3` | 单轮最多选中并注入几条公告 |
