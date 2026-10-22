@@ -25,7 +25,7 @@ node scripts/install.mjs
 # 3) 不需要新开会话：已经开着的会话，下一轮请求就会带上 Sunder 段
 ```
 
-验证一下：在会话里让模型调用 `sunder_status`，返回里应当出现 `dsh-sunder 1.2.1`、`preset=full`、`guard=on`。
+验证一下：在会话里让模型调用 `sunder_status`，返回里应当出现 `dsh-sunder 1.3.0`、`preset=full`、`guard=on`。
 
 第 3 步之所以不用重开对话，是因为 DSH 每处理一次模型请求都会重新组装（assemble）系统提示，Sunder 的三段是这次组装的参与者，而不是启动时拼死的固定字符串。细节见 [提示词架构](#提示词架构)。
 
@@ -116,7 +116,7 @@ npm pack                       # 在仓库根目录生成 dsh-sunder-<version>.t
 
 ### 安装后确认
 
-- DSH 启动日志里有 `[dsh-sunder] v1.2.1 active — language=zh, preset=full, think_header=off, fake_history=off, prompt sections registered, guard=on`；
+- DSH 启动日志里有 `[dsh-sunder] v1.3.0 active — language=zh, preset=full, think_header=off, fake_history=off, prompt sections registered, guard=on`；
 - 会话里调用 `sunder_status`，能看到 `placements=sunder:identity@-100000,sunder:rules@10150,sunder:footer@10300`；
 - 状态文件出现在 `$DSH_HOME/sunder/state.json`。
 
