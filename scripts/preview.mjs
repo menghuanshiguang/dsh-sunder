@@ -121,38 +121,39 @@ try {
     const detail = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
     console.log(`detail_text=${detail.slice(0, 1500)}`);
   }
-  // 设置页：web 上的默认绑定是 primary+alt+Comma（见 ui-settings-general 的
-  // settings.open 注册），桌面才是 primary+Comma。
-  const openSettings = async () => {
-    for (const keys of ['Control+Alt+Comma', 'Meta+Alt+Comma', 'Control+Comma']) {
-      await page.keyboard.press(keys);
-      await page.waitForTimeout(1200);
-      const opened = await page.getByText('Appearance', { exact: false }).count() + await page.getByText('General', { exact: false }).count();
-      console.log(`settings_after=${keys} hits=${opened}`);
-      if (opened > 0) return true;
-    }
-    // 兜底：找带 settings 语义的图标按钮直接点。
-    const clicked = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll('[title], [aria-label]')];
-      const hit = nodes.find((node) => /setting/i.test(node.getAttribute('title') ?? node.getAttribute('aria-label') ?? ''));
-      if (hit === undefined) return false;
-      hit.click();
-      return true;
-    });
-    console.log(`settings_icon_clicked=${clicked}`);
-    await page.waitForTimeout(1500);
-    return clicked;
-  };
+  // 每一行插件都有 title="View <name>" 的按钮，比点文字可靠。
+  const clickTitle = async (needle) => page.evaluate((wanted) => {
+    const nodes = [...document.querySelectorAll('[title], [aria-label]')];
+    const hit = nodes.find((node) => (node.getAttribute('title') ?? node.getAttribute('aria-label') ?? '').includes(wanted));
+    if (hit === undefined) return false;
+    hit.click();
+    return true;
+  }, needle);
 
-  await openSettings();
+  const viewed = await clickTitle('View Sunder');
+  console.log(`clicked_view_sunder=${viewed}`);
+  await page.waitForTimeout(2000);
+  await dismiss();
+  await capture('sunder-view');
+  const viewText = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
+  console.log(`sunder_view_text=${viewText.slice(0, 1800)}`);
+
+  // 设置入口在左下角账号菜单里。
+  await clickIf('Plugins');
+  await page.waitForTimeout(800);
+  await dismiss();
+  const account = await clickTitle('Account menu');
+  console.log(`clicked_account=${account}`);
+  await page.waitForTimeout(1200);
+  await capture('account-menu');
+  await labels('account');
+  const settings = await clickIf('Settings');
+  console.log(`clicked_settings=${settings}`);
+  await page.waitForTimeout(1500);
   await dismiss();
   await capture('settings');
   const settingsText = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
   console.log(`settings_text=${settingsText.slice(0, 1800)}`);
-  const attrs = await page.evaluate(() => [...document.querySelectorAll('[title], [aria-label]')]
-    .map((node) => `${node.tagName}:${node.getAttribute('title') ?? node.getAttribute('aria-label')}`)
-    .slice(0, 60).join(' | '));
-  console.log(`attrs=${attrs}`);
 
   await clickIf('Plugins');
   await page.waitForTimeout(800);
