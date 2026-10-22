@@ -68,17 +68,33 @@ jobs:
       - name: 启动并截图
         run: |
           set -euo pipefail
-          dsh web --port "$PORT" > "$RUNNER_TEMP/web.log" 2>&1 &
+          dsh web --port "$PORT" --no-open > "$RUNNER_TEMP/web.log" 2>&1 &
           echo "pid=$!"
-          for i in $(seq 1 60); do
-            if curl -fsS "http://127.0.0.1:$PORT" >/dev/null 2>&1; then
-              echo "up after ${i}s"; break
-            fi
+
+          # 服务需要 URL 里的一次性 token；从启动日志里取，别硬拼。
+          url=""
+          for i in $(seq 1 90); do
+            url=$(grep -oE 'http://127\.0\.0\.1:[0-9]+/\?token=[A-Za-z0-9_-]+' "$RUNNER_TEMP/web.log" | head -1 || true)
+            if [ -n "$url" ]; then echo "url ready after ${i}s"; break; fi
             sleep 1
           done
-          curl -fsS "http://127.0.0.1:$PORT" | head -c 400 || true
-          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node scripts/preview.mjs \
-            "http://127.0.0.1:$PORT" "$RUNNER_TEMP/shot.png" --wait "${{ inputs.wait_ms }}"
+          if [ -z "$url" ]; then
+            echo "::error title=no-url::dsh web 没有在 90 秒内打印带 token 的 URL"
+            tail -60 "$RUNNER_TEMP/web.log"
+            exit 1
+          fi
+
+          # 插件没激活时也要让这一轮红掉，不要截图假装健康。
+          if grep -q 'did not activate' "$RUNNER_TEMP/web.log"; then
+            echo "::error title=plugin-not-active::有插件启动失败"
+            tail -40 "$RUNNER_TEMP/web.log"
+            exit 1
+          fi
+
+          # playwright 装在 $RUNNER_TEMP/pw；ESM 按脚本位置解析，所以脚本要放进去。
+          cp scripts/preview.mjs "$RUNNER_TEMP/pw/preview.mjs"
+          cd "$RUNNER_TEMP/pw"
+          node preview.mjs "$url" "$RUNNER_TEMP/shot.png" --wait "${{ inputs.wait_ms }}"
 
       - name: 收集日志
         if: always()

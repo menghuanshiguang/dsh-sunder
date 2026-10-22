@@ -64,6 +64,10 @@ function createCtx() {
       listeners.set(name, handler);
       return () => {};
     },
+    /** Cordis reads an undeclared service through `get`, which returns undefined. */
+    get() {
+      return undefined;
+    },
     effect(run) {
       if (typeof run === 'function') run();
       return () => {};
