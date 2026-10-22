@@ -101,8 +101,8 @@ if (assembled !== undefined) {
   check(names.at(-1) === 'sunder:footer', 'footer is the last section', names.at(-1));
 
   const rendered = renderPrompt(assembled);
-  check(rendered.includes('Sunder 模式'), 'rendered prompt carries the zh identity claim');
-  check(rendered.includes('Sunder 运行规则'), 'rendered prompt carries the rules');
+  check(rendered.includes('本机用户的工作偏好'), 'rendered prompt carries the zh identity claim');
+  check(rendered.includes('Sunder 工作偏好'), 'rendered prompt carries the rules');
   check(rendered.includes('[Sunder'), 'rendered prompt carries the footer');
   check(rendered.includes(`[sunder ${sunder.VERSION}]`), 'footer carries the version');
   check(!rendered.includes('{{'), 'rendered prompt has no unresolved variables');
@@ -136,7 +136,7 @@ try {
 if (guarded !== undefined) {
   const text = renderPrompt(guarded);
   check(!text.includes('RIVAL COMPLETE ONLY'), 'a foreign complete section is replaced, not merged', `sections=${guarded.sections.map((s) => s.name).join(',')} | ${text.slice(0, 120)}`);
-  check(text.includes('Sunder 模式'), 'guard reclaims the identity claim after a complete section');
+  check(text.includes('本机用户的工作偏好'), 'guard reclaims the identity claim after a complete section');
   check(text.includes('[Sunder'), 'guard re-attaches the footer after a complete section');
 }
 
@@ -146,7 +146,7 @@ let repeated = true;
 for (let index = 0; index < 50; index += 1) {
   try {
     const assembly = await prompt.assemble({ agent: { session: { id: 'smoke' }, options: {} } });
-    if (!renderPrompt(assembly).includes('Sunder 模式')) repeated = false;
+    if (!renderPrompt(assembly).includes('本机用户的工作偏好')) repeated = false;
   } catch {
     repeated = false;
     break;

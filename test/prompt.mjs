@@ -43,7 +43,7 @@ const ruleCount = (text) => (text.match(/^\s*\d+\.\s/gmu) ?? []).length;
 // ---------------------------------------------------------------------------
 // 版本与段位置：v1.1.0 起位置不得漂移
 // ---------------------------------------------------------------------------
-check(PROMPT_VERSION === '1.2.0', 'PROMPT_VERSION 为 1.2.0', PROMPT_VERSION);
+check(PROMPT_VERSION === '1.3.0', 'PROMPT_VERSION 为 1.3.0', PROMPT_VERSION);
 check(SECTION_ORDERS.identity === -100000, 'identity 段位置为 -100000');
 check(SECTION_ORDERS.rules === 10150, 'rules 段位置为 10150');
 check(SECTION_ORDERS.footer === 10300, 'footer 段位置为 10300');
@@ -103,7 +103,8 @@ for (const preset of PRESETS) {
     const tag = `${preset}/${language}`;
     check(pack.preset === preset, `${tag} 回显解析后的预设`);
     check(pack.identity.includes('Sunder'), `${tag} identity 标注 Sunder`);
-    check(/(priority|outrank|优先)/iu.test(pack.identity), `${tag} identity 声明优先级`);
+    check(!/(outrank|优先级高于|priority over|override)/iu.test(pack.identity), `${tag} identity 不再声明覆盖身份/政策`);
+    check(/(preference|偏好)/iu.test(pack.identity), `${tag} identity 以本机偏好表述`);
     check(pack.footer.startsWith('[Sunder'), `${tag} footer 以 Sunder 标记开头`);
     check(pack.footer.includes(`[sunder ${VERSION}]`), `${tag} footer 带版本标记`);
     const blocks = [pack.identity, pack.rules, pack.footer];

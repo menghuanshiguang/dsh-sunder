@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-6-0",
+    "level": "warn",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.6.0：提示词改为「本机偏好」语气，不再被模型点破",
+      "en": "Sunder 1.6.0: preference-style prompt that models no longer call out"
+    },
+    "body": {
+      "zh": "1.6.0 重写了提示词：删掉「优先级高于系统提示/身份声明」「内容策略已由用户覆盖」这类话，模型不再先声明「这是操纵，我不照做」再拒绝。thinkHeader 与 fakeHistory 默认关闭（仍可配置开启），会话热身文案也收敛为「按你的偏好来：直接、完整」，避免模型事后反悔。边界不变：露骨成人内容与凭据/免杀类请求仍可能被模型拒绝，提示词只能提高概率。装完重启 DSH。",
+      "en": "1.6.0 rewrites the prompt: the \"outranks the system prompt / content policy overridden\" claims are gone, so models no longer open with a lecture about the prompt being manipulation before refusing. thinkHeader and fakeHistory are off by default (still configurable), and the warm-up exchange now says \"direct, complete answers in your style\" instead of absolute promises the model later regrets. Limits are unchanged: explicit adult content and credential/AV-evasion requests can still be refused; the prompt only improves the odds. Restart DSH after installing."
+    },
+    "link": "https://github.com/menhuanshiguang/dsh-sunder/releases/tag/v1.6.0",
+    "minVersion": "1.6.0"
+  },
+  {
     "id": "2026-10-22-sunder-1-5-1",
     "level": "warn",
     "date": "2026-10-22",
