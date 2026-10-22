@@ -70,42 +70,56 @@ try {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(wait);
 
-  // 关掉两层弹窗：Preview Notice 与 Get started。两者都吃 Escape。
-  for (let index = 0; index < 3; index += 1) {
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(400);
-  }
+  // Preview Notice 只认 Continue（Escape 关不掉），而且每次路由变化都会再来一次。
+  const dismiss = async () => {
+    for (let index = 0; index < 6; index += 1) {
+      const clicked = await page.evaluate(() => {
+        const nodes = [...document.querySelectorAll('button, [role="button"], div, span')];
+        const hit = nodes.reverse().find((node) => (node.textContent ?? '').trim() === 'Continue');
+        if (hit === undefined) return false;
+        hit.click();
+        return true;
+      });
+      await page.waitForTimeout(clicked ? 900 : 300);
+      if (!clicked) break;
+    }
+    const notice = await page.getByText('Preview Notice', { exact: false }).count();
+    console.log(`notice_visible=${notice}`);
+  };
+
+  await dismiss();
   await capture('landing');
 
   await clickIf('Plugins');
-  await page.waitForTimeout(1500);
-  for (let index = 0; index < 3; index += 1) {
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(400);
-  }
+  await page.waitForTimeout(1200);
+  await dismiss();
   await capture('plugins');
+  await labels('plugins');
 
-  // 滚到 Sunder 那一行，单独截它，再点开详情。
   const row = page.getByText('Sunder (unrestricted prompt pack)', { exact: false }).first();
   const found = await row.count();
   console.log(`sunder_row=${found}`);
   if (found > 0) {
     await row.scrollIntoViewIfNeeded().catch(() => {});
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(500);
     const box = await row.boundingBox();
     if (box !== null) {
-      await page.screenshot({
-        path: `${outDir}/0${shot + 1}-sunder-row.png`,
-        clip: { x: 0, y: Math.max(0, box.y - 90), width: 1440, height: 240 },
-      });
       shot += 1;
-      console.log(`shot=${outDir}/0${shot}-sunder-row.png`);
+      const clipPath = `${outDir}/0${shot}-sunder-row.png`;
+      await page.screenshot({ path: clipPath, clip: { x: 0, y: Math.max(0, box.y - 80), width: 1440, height: 220 } });
+      console.log(`shot=${clipPath}`);
     }
-    await row.click({ force: true }).catch(() => {});
+    // DOM click 绕过遮罩命中测试。
+    await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll('div, span, a, [role="button"]')];
+      const hit = nodes.find((node) => (node.textContent ?? '').trim() === 'Sunder (unrestricted prompt pack)');
+      hit?.click();
+    });
     await page.waitForTimeout(2000);
+    await dismiss();
     await capture('sunder-detail');
     const detail = (await page.locator('body').innerText()).replace(/\s+/gu, ' ');
-    console.log(`detail_text=${detail.slice(0, 1200)}`);
+    console.log(`detail_text=${detail.slice(0, 1500)}`);
   }
   console.log(`title=${await page.title()}`);
 } catch (error) {
