@@ -6,6 +6,22 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-22
+
+### Fixed
+
+- **每轮运行时报 `format v4 message requires a producer-owned source kind`**：1.3.0–1.4.1 的规则卡
+  用 `source: { kind: 'plugin', plugin: 'dsh-sunder' }` 标注来源。会话格式 V4 只接受"生产者自己的
+  kind"（`source.kind` 非空且不是已退役的 `"plugin"` wrapper；V3 迁移会把旧 wrapper 改写成
+  `plugin:<plugin>`），所以这条消息在写入/恢复时被
+  `assertV4RowAdmission` / `assertV4MessageSources` 拒绝，整轮报错。现在导出一个
+  `PRODUCER_KIND = 'dsh-sunder'` 常量，注入消息直接写 `source: { kind: PRODUCER_KIND }` 并去掉
+  `plugin` 字段。聊天 UI 对不认识的 kind 按 `inject` 上下文条渲染，卡片仍可见、不会冒充用户气泡。
+- `test/source.mjs`：用宿主真实的 `assertV4RowAdmission` 做回归——旧 wrapper 在 `user/message`、
+  `assistant/message` 与 `agent/inbox/spliced.inserted` 三种行上都必须抛 `/producer-owned/`，
+  新的 producer kind 必须通过；运行时缺失时整体跳过。
+- `test/guard.mjs` 的断言从旧 wrapper 改为 `PRODUCER_KIND`，并断言 source 里不再有 `plugin` 字段。
+
 ## [1.4.1] - 2026-10-22
 
 ### Fixed
@@ -113,7 +129,8 @@ All notable changes to **dsh-sunder** are recorded here. The format follows
   user 消息追加到本批输入末尾，位置在运行期上下文快照之后、模型回答之前。系统提示每轮才组装
   一次，而这条消息在 `messages` 里——scope 影子段、别人的 `complete`、历史压缩都动不了它。
   同一 `(agent, turn)` 只注入一次；工具轮次不重复；空 step 不注入。会话记录里可见
-  （`source.kind = 'plugin'`），不是隐藏注入。
+  （`source.kind = 'dsh-sunder'`，1.4.2 起；早期版本用的 `'plugin'` wrapper 已被 V4 格式拒绝），
+  不是隐藏注入。
 - `test/guard.mjs`：不依赖 DSH 运行时的守卫离线测试（迷你 fake registry 复刻
   `complete` 接管语义），断言排他替换、50 次组装不嵌套 wrapper、两个上下文为 required。
   之前守卫只在 `test/smoke.mjs` 里覆盖，而 smoke 在没有 DSH 运行时的机器上会整体跳过。

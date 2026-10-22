@@ -1,5 +1,20 @@
 [
   {
+    "id": "2026-10-22-sunder-1-4-2",
+    "level": "warn",
+    "date": "2026-10-22",
+    "title": {
+      "zh": "Sunder 1.4.2：修复每轮报错 format v4 message requires a producer-owned source kind",
+      "en": "Sunder 1.4.2: fixes the per-turn \"format v4 message requires a producer-owned source kind\" error"
+    },
+    "body": {
+      "zh": "1.3.0–1.4.1 的规则卡用 source: {kind:'plugin', plugin:'dsh-sunder'} 标注来源。会话格式 V4 只接受生产者自己的 kind（非空且不是已退役的 'plugin' wrapper），于是这条注入消息在写入/恢复时被拒，整轮报错。1.4.2 直接写 source: {kind:'dsh-sunder'} 并去掉 plugin 字段；聊天 UI 把未知 kind 渲染成 inject 上下文条，卡片仍然可见。已注入过旧 wrapper 的会话直接在当前版本继续即可，无需删会话。装完重启 DSH。",
+      "en": "In 1.3.0–1.4.1 the rule card tagged itself with source: {kind:'plugin', plugin:'dsh-sunder'}. Session format V4 only accepts a producer-owned kind (non-empty and not the retired 'plugin' wrapper), so the injected message was rejected on write/restore and the whole turn failed. 1.4.2 writes source: {kind:'dsh-sunder'} and drops the plugin field; the chat UI renders an unknown kind as an inject context row, so the card is still visible. Conversations that already received the old wrapper can simply continue on the new version — no need to delete them. Restart DSH after installing."
+    },
+    "link": "https://github.com/menghuanshiguang/dsh-sunder/releases/tag/v1.4.2",
+    "minVersion": "1.4.2"
+  },
+  {
     "id": "2026-10-22-sunder-1-4-1",
     "level": "warn",
     "date": "2026-10-22",

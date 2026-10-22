@@ -231,6 +231,7 @@ Get-Content "<profile>\cordis.patch.yml" | Select-String -Context 0,10 'id: sund
 | 面板里语言/预设显示"未知" | v1.3.0 及更早的 host 没有 HTTP 桥，只能读 `pluginManager`/`pluginInventory`。升级到 1.3.1 并重启后，面板走 `/sunder/api/status`，显示真实值；桥失败时看卡片底部 `host 桥：` 告警 |
 | 面板显示 `公告源: HTTP 429` | v1.3.1 前客户端直连 `api.github.com` 触发了未认证限流。升级并重启后客户端不再请求 GitHub；host 侧 feed 走 `api.github.com` 镜像 + 随包兜底，不会 429 |
 | 面板顶部提示"未连上 host 桥" | 当前 host 没注册 `/sunder/api/*`：DSH < 1.3.1，或 profile 没有 `webServer`（headless）。面板自动降级为只读静态信息 |
+| 每轮报错 `format v4 message requires a producer-owned source kind` | 1.3.0–1.4.1 的规则卡用 `{kind:'plugin',plugin:'dsh-sunder'}` 标来源，V4 会话格式只接受非空的"生产者自己的 kind"，于是注入消息在写入/恢复时被拒。升级到 1.4.2 并重启即可（新消息写 `{kind:'dsh-sunder'}`，旧会话直接继续、无需删除） |
 | `doctor` 报 `profile` fail | 传 `--profile <真实 profile 目录>`；v1.3.1 起 `DSH_PROFILE=desktop` 这类 profile **名字**会解析成 `<DSH_HOME>/profiles/desktop`（之前会被当成相对路径），`DSH_HOME` 为空时是 `~/.dsh` |
 
 还搞不定 → 开 issue，附上[第 7 节](#7-怎么收集诊断信息)的材料。设计层面的"为什么这样"看 [ARCHITECTURE](./ARCHITECTURE.md)。

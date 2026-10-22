@@ -132,7 +132,11 @@ try {
   const card = firstTurn.messages.at(-1);
   check(firstTurn.messages.length === 2, 'rule card is appended to the admitted batch', String(firstTurn.messages.length));
   check(card?.role === 'user', 'rule card uses the user role', String(card?.role));
-  check(card?.source?.kind === 'plugin' && card?.source?.plugin === 'dsh-sunder', 'rule card is attributed to the plugin', JSON.stringify(card?.source));
+  check(
+    card?.source?.kind === sunder.PRODUCER_KIND && !Object.hasOwn(card?.source ?? {}, 'plugin'),
+    'rule card carries the producer-owned source kind',
+    JSON.stringify(card?.source),
+  );
   check(card?.content?.[0]?.text.includes('本轮'), 'rule card carries the zh operative clause', String(card?.content?.[0]?.text).slice(0, 40));
   check(firstTurn.messages[0] === claimed[0], 'the user request stays first and untouched');
 

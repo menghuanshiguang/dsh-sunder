@@ -152,7 +152,8 @@ admit 的用户消息。越靠近回答的位置，越难被拿走。
 - 同一 `(agent, turn)` 只注入一次：重试不会叠出第二张；
 - `decision.messages` 为空时不注入：没有输入的空 step 不能被这张卡变成一次真实请求。
 
-它是 logged message（`source.kind = 'plugin'`），所以会话记录里看得见——这是有意的，
+它是 logged message（`source.kind = 'dsh-sunder'`，1.4.2 起；早期版本写的 `{kind:'plugin'}`
+wrapper 会被 V4 会话格式拒绝，见 CHANGELOG 1.4.2），所以会话记录里看得见——这是有意的，
 不是隐藏注入。
 
 ### 为什么是 user 角色

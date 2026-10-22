@@ -43,6 +43,23 @@ export const VERSION = manifest.version;
 /** Plugin name as declared by the manifest and the bundle patch. */
 export const name = 'dsh-sunder';
 
+/**
+ * Producer kind stamped onto the messages this plugin injects.
+ *
+ * V4 session rows require a "producer-owned source kind": `source.kind` must be
+ * a non-empty string that is not the retired `"plugin"` wrapper (the migration
+ * rewrites released V3 rows that still carry `{kind:"plugin", plugin}` into
+ * `plugin:<plugin>`). A message claiming `kind:"plugin"` is rejected on write
+ * and on restore with
+ *   `format v4 message requires a producer-owned source kind`
+ * so the card advertises this plugin directly instead of the generic wrapper.
+ *
+ * The chat UI renders any kind it does not recognize as an `inject` context
+ * row labeled with the kind, so the card shows up as plugin context and never
+ * as a user-typed bubble.
+ */
+export const PRODUCER_KIND = 'dsh-sunder';
+
 /** The prompt registry is the only service this bundle requires. */
 export const inject = ['systemPrompt'];
 
@@ -407,7 +424,7 @@ export function apply(ctx, rawConfig = {}) {
           id: randomUUID(),
           role: 'user',
           content: [{ type: 'text', text: ruleCard(language) }],
-          source: { kind: 'plugin', plugin: 'dsh-sunder' },
+          source: { kind: PRODUCER_KIND },
         },
       ],
     };
