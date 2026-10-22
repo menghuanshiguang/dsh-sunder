@@ -94,13 +94,13 @@ jobs:
           # playwright 装在 $RUNNER_TEMP/pw；ESM 按脚本位置解析，所以脚本要放进去。
           cp scripts/preview.mjs "$RUNNER_TEMP/pw/preview.mjs"
           cd "$RUNNER_TEMP/pw"
-          node preview.mjs "$url" "$RUNNER_TEMP/shots" --wait "${{ inputs.wait_ms }}"
+          node preview.mjs "$url" "$RUNNER_TEMP/shots" --wait "${{ inputs.wait_ms }}" 2>&1 | tee "$RUNNER_TEMP/preview.log"
 
       - name: 收集日志
         if: always()
         run: |
           cp "$RUNNER_TEMP/web.log" "$GITHUB_WORKSPACE/" 2>/dev/null || true
-          cp -r "$RUNNER_TEMP/shots" "$GITHUB_WORKSPACE/" 2>/dev/null || true
+          cp -r "$RUNNER_TEMP/shots" "$RUNNER_TEMP/preview.log" "$GITHUB_WORKSPACE/" 2>/dev/null || true
           tail -80 "$RUNNER_TEMP/web.log" || true
 
       - uses: actions/upload-artifact@v4
@@ -110,4 +110,5 @@ jobs:
           path: |
             shots/
             web.log
+            preview.log
           if-no-files-found: warn

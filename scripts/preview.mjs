@@ -53,16 +53,17 @@ const labels = async (step) => {
   console.log(`labels[${step}]=${texts.join(' | ')}`);
 };
 
+/** Click by exact visible text through the DOM, bypassing actionability checks. */
 const clickIf = async (name) => {
-  const target = page.getByText(name, { exact: false }).first();
-  if (await target.count() === 0) return false;
-  try {
-    await target.click({ timeout: 3000 });
-    await page.waitForTimeout(1200);
+  const clicked = await page.evaluate((wanted) => {
+    const nodes = [...document.querySelectorAll('button, a, [role="button"], [role="menuitem"], li, div, span')];
+    const hit = nodes.reverse().find((node) => (node.textContent ?? '').trim() === wanted);
+    if (hit === undefined) return false;
+    hit.click();
     return true;
-  } catch {
-    return false;
-  }
+  }, name);
+  if (clicked) await page.waitForTimeout(1500);
+  return clicked;
 };
 
 try {
